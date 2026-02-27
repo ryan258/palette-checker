@@ -253,6 +253,10 @@ header p {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
 }
 
+.hex-input[aria-invalid="true"] {
+  border-color: var(--error-text);
+}
+
 .remove-btn {
   position: absolute;
   top: -8px;
@@ -273,6 +277,11 @@ header p {
 }
 
 .color-input-wrapper:hover .remove-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.color-input-wrapper:focus-within .remove-btn {
   opacity: 1;
   transform: scale(1);
 }
@@ -344,11 +353,20 @@ header p {
   align-items: flex-end;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   padding-bottom: 1rem;
+  gap: 1rem;
 }
 
 .results-header h2 {
   font-size: 1.8rem;
   font-weight: 700;
+}
+
+.results-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .legend {
@@ -403,9 +421,42 @@ header p {
   border: 1px solid var(--error-text);
 }
 
+.apca-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.apca-mode-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+.apca-mode-toggle input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Utilities */
 .hidden {
   display: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Combinations Grid */
@@ -516,6 +567,9 @@ header p {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-secondary);
+}
+
+.stat-label[title] {
   cursor: help;
 }
 
@@ -655,28 +709,28 @@ footer a:hover {
 }
 
 /* Color Blindness Filters */
-.filter-protanopia {
+.filter-protanopia .combo-preview {
   filter: url("#protanopia");
 }
-.filter-deuteranopia {
+.filter-deuteranopia .combo-preview {
   filter: url("#deuteranopia");
 }
-.filter-tritanopia {
+.filter-tritanopia .combo-preview {
   filter: url("#tritanopia");
 }
-.filter-protanomaly {
+.filter-protanomaly .combo-preview {
   filter: url("#protanomaly");
 }
-.filter-deuteranomaly {
+.filter-deuteranomaly .combo-preview {
   filter: url("#deuteranomaly");
 }
-.filter-tritanomaly {
+.filter-tritanomaly .combo-preview {
   filter: url("#tritanomaly");
 }
-.filter-achromatopsia {
+.filter-achromatopsia .combo-preview {
   filter: url("#achromatopsia");
 }
-.filter-achromatomaly {
+.filter-achromatomaly .combo-preview {
   filter: url("#achromatomaly");
 }
 
@@ -727,6 +781,12 @@ footer a:hover {
 .popover-header h3 {
   font-size: 1.2rem;
   font-weight: 700;
+}
+
+.popover-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .close-btn {
@@ -784,6 +844,14 @@ footer a:hover {
   color: var(--text-primary);
 }
 
+.btn:focus-visible,
+.badge:focus-visible,
+.close-btn:focus-visible,
+.remove-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Empty State */
 .empty-state {
   grid-column: 1 / -1;
@@ -804,6 +872,11 @@ footer a:hover {
     flex-direction: column;
     align-items: flex-start;
     gap: 1rem;
+  }
+
+  .results-tools {
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .combinations-grid {

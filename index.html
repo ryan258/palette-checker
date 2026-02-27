@@ -80,7 +80,7 @@
       <header>
         <h1>ChromaCheck.</h1>
         <p>
-          Ensure your color palettes are accessible. Add 2 to 5 colors to
+          Ensure your color palettes are accessible. Add 2 to 9 colors to
           compare their WCAG contrast ratios instantly.
         </p>
       </header>
@@ -92,6 +92,7 @@
           </div>
           <div class="actions">
             <button
+              type="button"
               id="settings-btn"
               class="btn btn-secondary"
               aria-label="Settings"
@@ -115,7 +116,7 @@
               </svg>
             </button>
 
-            <button id="add-color-btn" class="btn btn-primary">
+            <button type="button" id="add-color-btn" class="btn btn-primary">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 width="20"
@@ -133,7 +134,7 @@
               Add Color
             </button>
             <span id="color-count-indicator" class="count-indicator"
-              >2/9 Colors</span
+              >3/9 Colors</span
             >
           </div>
         </section>
@@ -141,11 +142,50 @@
         <section class="results">
           <div class="results-header">
             <h2>Contrast Combinations</h2>
-            <div class="legend" id="filter-legend">
-              <button class="badge badge-aaa" data-filter="AAA" aria-pressed="true">AAA</button>
-              <button class="badge badge-aa" data-filter="AA" aria-pressed="true">AA</button>
-              <button class="badge badge-large" data-filter="AA Large" aria-pressed="true">AA LARGE</button>
-              <button class="badge badge-fail" data-filter="Fail" aria-pressed="true">FAIL</button>
+            <div class="results-tools">
+              <div
+                class="legend"
+                id="filter-legend"
+                role="group"
+                aria-label="Filter combinations by WCAG 2.1 level"
+              >
+                <button
+                  type="button"
+                  class="badge badge-aaa"
+                  data-filter="AAA"
+                  aria-pressed="true"
+                >
+                  AAA
+                </button>
+                <button
+                  type="button"
+                  class="badge badge-aa"
+                  data-filter="AA"
+                  aria-pressed="true"
+                >
+                  AA
+                </button>
+                <button
+                  type="button"
+                  class="badge badge-large"
+                  data-filter="AA Large"
+                  aria-pressed="true"
+                >
+                  AA LARGE
+                </button>
+                <button
+                  type="button"
+                  class="badge badge-fail"
+                  data-filter="Fail"
+                  aria-pressed="true"
+                >
+                  FAIL
+                </button>
+              </div>
+              <label class="apca-mode-toggle" for="apca-informational-toggle">
+                <input type="checkbox" id="apca-informational-toggle" checked />
+                <span>APCA informational only</span>
+              </label>
             </div>
           </div>
 
@@ -192,10 +232,22 @@
       </main>
 
       <!-- Settings Popover -->
-      <div id="settings-popover" class="popover glass-panel">
+      <div
+        id="settings-popover"
+        class="popover glass-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        aria-hidden="true"
+      >
         <div class="popover-header">
-          <h3>Settings</h3>
-          <button id="close-settings-btn" class="close-btn" aria-label="Close">
+          <h3 id="settings-title">Settings</h3>
+          <button
+            type="button"
+            id="close-settings-btn"
+            class="close-btn"
+            aria-label="Close"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="20"
