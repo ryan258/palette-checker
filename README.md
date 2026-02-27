@@ -2,7 +2,7 @@
 
 A stunning, high-performance web application to check color contrast ratios and evaluate WCAG AA and AAA compliance for custom palettes perfectly bounded between 2 to 5 colors.
 
-Live Demo: [https://palette-checker-rj.surge.sh](https://palette-checker-rj.surge.sh)
+Live Demo: [https://ryan258.github.io/palette-checker/](https://ryan258.github.io/palette-checker/)
 
 ## Features
 
@@ -19,7 +19,7 @@ Since this project has zero build-time dependencies, running it locally is incre
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/yourusername/palette-checker.git
+   git clone https://github.com/ryan258/palette-checker.git
    cd palette-checker
    ```
 
