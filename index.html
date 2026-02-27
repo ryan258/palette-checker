@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChromaCheck - WCAG Contrast Checker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="background-blobs">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+    </div>
+
+    <div class="container">
+      <header>
+        <h1>ChromaCheck.</h1>
+        <p>
+          Ensure your color palettes are accessible. Add 2 to 5 colors to
+          compare their WCAG contrast ratios instantly.
+        </p>
+      </header>
+
+      <main>
+        <section class="controls glass-panel">
+          <div class="color-inputs" id="color-inputs">
+            <!-- Color inputs will be injected here by JS -->
+          </div>
+          <div class="actions">
+            <button id="add-color-btn" class="btn btn-primary">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Add Color
+            </button>
+            <span id="color-count-indicator" class="count-indicator"
+              >2/5 Colors</span
+            >
+          </div>
+        </section>
+
+        <section class="results">
+          <div class="results-header">
+            <h2>Contrast Combinations</h2>
+            <div class="legend">
+              <span class="badge badge-aaa">AAA</span>
+              <span class="badge badge-aa">AA</span>
+              <span class="badge badge-large">AA Large</span>
+              <span class="badge badge-fail">Fail</span>
+            </div>
+          </div>
+
+          <!-- The matrix/grid of combinations will be injected here -->
+          <div id="combinations-grid" class="combinations-grid"></div>
+        </section>
+      </main>
+
+      <footer>
+        <p>
+          Calculates contrast ratios using the
+          <a
+            href="https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio"
+            target="_blank"
+            rel="noopener"
+            >WCAG 2.1 specifications</a
+          >.
+        </p>
+      </footer>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
