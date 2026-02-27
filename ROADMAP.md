@@ -19,7 +19,6 @@ This roadmap outlines potential future features and enhancements for the WCAG Co
 
 ## Phase 3: Accessibility Analysis
 
-- [ ] **Color Blindness Simulator**: Add filters to the UI to simulate how the selected palette appears to users with Protanopia, Deuteranopia, Tritanopia, and Achromatopsia.
 - [ ] **Typography Scale Preview**: Test the colors against varying font weights and sizes (e.g., 14px regular vs 24px bold) to visually confirm the "Large Text" AA passing criteria.
 - [ ] **Image Background Integration**: Allow users to upload or paste an image URL to test text contrast against real-world backgrounds.
 

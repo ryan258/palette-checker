@@ -138,6 +138,7 @@ header h1 {
   margin-bottom: 0.5rem;
   background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: 0 4px 20px rgba(255, 255, 255, 0.1);
 }
@@ -529,6 +530,136 @@ footer a {
 footer a:hover {
   text-decoration: underline;
   color: var(--accent-hover);
+}
+
+/* Color Blindness Filters */
+.filter-protanopia {
+  filter: url("#protanopia");
+}
+.filter-deuteranopia {
+  filter: url("#deuteranopia");
+}
+.filter-tritanopia {
+  filter: url("#tritanopia");
+}
+.filter-protanomaly {
+  filter: url("#protanomaly");
+}
+.filter-deuteranomaly {
+  filter: url("#deuteranomaly");
+}
+.filter-tritanomaly {
+  filter: url("#tritanomaly");
+}
+.filter-achromatopsia {
+  filter: url("#achromatopsia");
+}
+.filter-achromatomaly {
+  filter: url("#achromatomaly");
+}
+
+/* Settings Popover */
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.popover {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1000;
+  width: 90%;
+  max-width: 400px;
+  background: rgba(15, 23, 42, 0.85); /* Slightly darker for modal pop */
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.popover.active {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: auto;
+}
+
+.popover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.popover-header h3 {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  color: var(--text-primary);
+}
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.setting-group label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.custom-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1em;
+}
+
+.custom-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.custom-select optgroup,
+.custom-select option {
+  background: var(--bg-color);
+  color: var(--text-primary);
 }
 
 /* Empty State */

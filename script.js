@@ -18,6 +18,10 @@ const colorInputsContainer = document.getElementById("color-inputs");
 const addColorBtn = document.getElementById("add-color-btn");
 const colorCountIndicator = document.getElementById("color-count-indicator");
 const combinationsGrid = document.getElementById("combinations-grid");
+const settingsBtn = document.getElementById("settings-btn");
+const closeSettingsBtn = document.getElementById("close-settings-btn");
+const settingsPopover = document.getElementById("settings-popover");
+const colorBlindnessSelect = document.getElementById("color-blindness-select");
 
 // Utilities
 function generateId() {
@@ -299,6 +303,33 @@ function updateColor(id, hex) {
 
 // Setup
 addColorBtn.addEventListener("click", addColor);
+
+// Settings Logic
+settingsBtn.addEventListener("click", () => {
+  settingsPopover.classList.add("active");
+});
+
+closeSettingsBtn.addEventListener("click", () => {
+  settingsPopover.classList.remove("active");
+});
+
+document.addEventListener("click", (e) => {
+  if (
+    settingsPopover.classList.contains("active") &&
+    !settingsPopover.contains(e.target) &&
+    !settingsBtn.contains(e.target)
+  ) {
+    settingsPopover.classList.remove("active");
+  }
+});
+
+colorBlindnessSelect.addEventListener("change", (e) => {
+  const filterVal = e.target.value;
+  combinationsGrid.className = "combinations-grid"; // reset classes
+  if (filterVal !== "none") {
+    combinationsGrid.classList.add(`filter-${filterVal}`);
+  }
+});
 
 // Initial render
 renderColorInputs();

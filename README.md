@@ -7,6 +7,7 @@ Live Demo: [https://ryan258.github.io/palette-checker/](https://ryan258.github.i
 ## Features
 
 - **Contrast Matrix**: Instantly calculates and generates a full cross-combination matrix comparing every color with every other color in your palette.
+- **Color Blindness Simulator**: View your palette through 7 scientifically accurate filters simulating Dichromacy (Protanopia, Deuteranopia, Tritanopia), Anomalous Trichromacy, and Monochromacy.
 - **WCAG 2.1 Compliance**: Accurately calculates relative luminance and provides pass/fail labels (AAA, AA, AA Large) based on the official W3C specifications.
 - **Dynamic Color Management**: Add or remove colors seamlessly (minimum 2, maximum 5).
 - **Premium Design**: Built with a sleek glassmorphism aesthetic, custom interactive inputs, dynamic fluid layouts, and smooth micro-animations.
