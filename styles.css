@@ -363,6 +363,20 @@ header p {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.badge.inactive {
+  opacity: 0.4;
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: var(--text-secondary) !important;
 }
 
 .badge-aaa {
@@ -387,6 +401,11 @@ header p {
   background: var(--error-bg);
   color: var(--error-text);
   border: 1px solid var(--error-text);
+}
+
+/* Utilities */
+.hidden {
+  display: none !important;
 }
 
 /* Combinations Grid */
@@ -472,16 +491,44 @@ header p {
   opacity: 0.5;
 }
 
+.scores-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
 .combo-stats {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  width: 100%;
+}
+
+.apca-row {
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  padding-top: 0.5rem;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  cursor: help;
+}
+
+.stat-right {
+  display: flex;
+  align-items: center;
 }
 
 .ratio {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 800;
   font-family: monospace;
+  margin-right: 0.5rem;
 }
 
 .status-badge {
@@ -530,6 +577,81 @@ footer a {
 footer a:hover {
   text-decoration: underline;
   color: var(--accent-hover);
+}
+
+/* Acronym Glossary Accordion */
+.glossary-accordion {
+  margin-top: 3rem;
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: var(--transition-smooth);
+}
+
+.glossary-accordion summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  list-style: none; /* Remove default arrow in Firefox/WebKit */
+  outline: none;
+}
+
+.glossary-accordion summary::-webkit-details-marker {
+  display: none; /* Remove default arrow in WebKit */
+}
+
+.summary-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.summary-title svg {
+  color: var(--accent);
+}
+
+.glossary-accordion .chevron {
+  transition: transform 0.3s ease;
+  color: var(--text-secondary);
+}
+
+.glossary-accordion[open] .chevron {
+  transform: rotate(180deg);
+}
+
+.glossary-content {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glossary-content dl {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin: 0;
+}
+
+.glossary-content dt {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 1.05rem;
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.05em;
+}
+
+.glossary-content dd {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.glossary-content strong {
+  color: var(--text-primary);
 }
 
 /* Color Blindness Filters */

@@ -7,7 +7,6 @@ This roadmap outlines potential future features and enhancements for the WCAG Co
 - [ ] **Theme Persistence**: Save selected colors in `localStorage` so they persist across page reloads.
 - [ ] **Palette Export/Import**: Ability to export the current color palette as a JSON file or a shareable URL parameter string, and import palettes.
 - [ ] **Color Format Toggles**: Add support for entering and displaying colors in RGB, HSL, and OKLCH formats, in addition to HEX.
-- [ ] **WCAG 3.0 (APCA) Support**: Implement the Advanced Perceptual Contrast Algorithm alongside WCAG 2.1 to future-proof the tool.
 - [ ] **"Auto-Fix" Suggestion**: If a combination fails, provide a button to automatically suggest the nearest color that passes AA or AAA.
 
 ## Phase 2: Design & Workflow Integration
