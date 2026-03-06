@@ -24,4 +24,4 @@ This roadmap outlines potential future features and enhancements for the WCAG Co
 ## Phase 4: Platform Expansion
 
 - [ ] **Figma Plugin**: Port the core logic into a Figma plugin so designers can check contrast directly on their artboards.
-- [ ] **Browser Extension**: Create a Chrome/Firefox extension to sample colors from any webpage and run them through the checker.
+- [x] **Browser Extension**: Chrome extension MVP with a persistent side panel, page color extraction, contrast matrix, element picker, and a shared WCAG 2.1 + APCA calculation engine. See [`chrome-extension/ROADMAP.md`](chrome-extension/ROADMAP.md) for the full extension roadmap.
