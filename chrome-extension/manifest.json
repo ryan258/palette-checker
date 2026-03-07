@@ -18,6 +18,7 @@
   "side_panel": {
     "default_path": "popup/popup.html"
   },
+  "devtools_page": "devtools/devtools.html",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
@@ -29,5 +30,11 @@
       "js": ["content/content.js"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "chromacheck@ryanjohnson.com",
+      "strict_min_version": "109.0"
+    }
+  }
 }

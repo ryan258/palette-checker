@@ -80,6 +80,28 @@
           </button>
           <button
             type="button"
+            id="export-btn"
+            class="btn-icon"
+            title="Export Report"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+          <button
+            type="button"
             id="settings-btn"
             class="btn-icon"
             title="Extension Settings"
@@ -321,6 +343,14 @@
           <input type="checkbox" id="auto-sync-toggle" />
         </label>
 
+        <label class="setting-row" style="margin-bottom: 12px">
+          <div class="setting-info">
+            <strong>Console Warnings</strong>
+            <p>Inject contrast failures into DevTools Console.</p>
+          </div>
+          <input type="checkbox" id="console-warnings-toggle" />
+        </label>
+
         <label class="setting-group" style="margin-bottom: 0">
           <div class="setting-info">
             <strong>Color Vision Simulation</strong>
@@ -337,6 +367,25 @@
             <option value="achromatopsia">Achromatopsia (Monochromacy)</option>
             <option value="achromatomaly">Achromatomaly (Low color)</option>
           </select>
+        </label>
+        <label class="setting-group">
+          <div class="setting-info">
+            <strong>GitHub Repository</strong>
+            <p>Repo URL for 1-click issue drafts.</p>
+          </div>
+          <input
+            type="url"
+            id="github-repo-url"
+            placeholder="https://github.com/org/repo"
+            style="
+              width: 100%;
+              padding: 8px 10px;
+              border-radius: 6px;
+              background: rgba(15, 23, 42, 0.4);
+              color: white;
+              border: 1px solid rgba(148, 163, 184, 0.2);
+            "
+          />
         </label>
       </div>
     </div>

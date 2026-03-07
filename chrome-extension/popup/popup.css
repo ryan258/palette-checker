@@ -840,6 +840,20 @@ body::-webkit-scrollbar-thumb {
   min-width: 0;
 }
 
+.issue-token {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: #8adeff;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", monospace;
+  font-size: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .no-results {
   padding: 18px;
   border-radius: 16px;

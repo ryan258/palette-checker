@@ -90,8 +90,10 @@ const state = {
   },
   settings: {
     autoSync: false,
+    consoleWarnings: false,
     cvdMode: "none",
     standard: "WCAG21",
+    githubRepoUrl: "",
   },
   pinnedItems: [],
   isExtracting: false,
@@ -134,8 +136,13 @@ const settingsBtn = document.getElementById("settings-btn");
 const closeSettingsBtn = document.getElementById("close-settings");
 const settingsPopover = document.getElementById("settings-popover");
 const autoSyncToggle = document.getElementById("auto-sync-toggle");
+const consoleWarningsToggle = document.getElementById(
+  "console-warnings-toggle",
+);
 const standardSelect = document.getElementById("standard-select");
 const cvdSelect = document.getElementById("color-blindness-select");
+const githubRepoUrlInput = document.getElementById("github-repo-url");
+const exportBtn = document.getElementById("export-btn");
 const historySection = document.getElementById("history-section");
 const historyList = document.getElementById("history-list");
 const historyCount = document.getElementById("history-count");
@@ -809,19 +816,31 @@ function buildIssuesData(pairs) {
       const simText = simulateCVD(pair.textColor, cvdMode);
       const simBg = simulateCVD(pair.bgColor, cvdMode);
 
-      const wcagRatio = getContrastRatio(simText, simBg);
-      const wcagLevel = getContextualComplianceLevel(
+      let wcagRatio = getContrastRatio(simText, simBg);
+      let wcagLevel = getContextualComplianceLevel(
         wcagRatio,
         pair.fontSize,
         pair.fontWeight,
         state.settings.standard,
       );
-      const apcaScore = calcAPCA(simText, simBg);
-      const apcaLevel = getAPCAComplianceLevel(
+      let apcaScore = calcAPCA(simText, simBg);
+      let apcaLevel = getAPCAComplianceLevel(
         apcaScore,
         pair.fontSize,
         pair.fontWeight,
       );
+
+      if (pair.type === "target-size") {
+        wcagRatio = 0;
+        wcagLevel = "Fail";
+        apcaScore = 0;
+        apcaLevel = "Fail";
+      } else if (pair.type === "link-contrast") {
+        // WCAG 1.4.1 requires exact 3.0:1 threshold
+        wcagLevel = wcagRatio >= 3.0 ? "AA Large" : "Fail";
+        apcaLevel = Math.abs(apcaScore) >= 45 ? "AA Large" : "Fail";
+      }
+
       return { ...pair, wcagRatio, wcagLevel, apcaScore, apcaLevel };
     })
     .sort((a, b) => {
@@ -892,9 +911,11 @@ function renderIssues() {
         ${
           issue.type === "target-size"
             ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>'
-            : issue.type === "non-text"
-              ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
-              : "Aa"
+            : issue.type === "link-contrast"
+              ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>'
+              : issue.type === "non-text"
+                ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
+                : "Aa"
         }
       </div>
       <div class="issue-info">
@@ -903,6 +924,8 @@ function renderIssues() {
           <span class="issue-tag">${escapeHtml(issue.tagName)}</span>
           ${issue.type === "text" || issue.type === "placeholder" ? `<span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>` : ""}
           <span class="issue-text-preview">${escapeHtml(issue.textPreview)}</span>
+          ${issue.textColorToken ? `<span class="issue-token" title="Foreground: ${issue.textColor}">${escapeHtml(issue.textColorToken)}</span>` : ""}
+          ${issue.bgColorToken ? `<span class="issue-token" title="Background: ${issue.bgColor}">${escapeHtml(issue.bgColorToken)}</span>` : ""}
         </div>
         <div class="combo-scores">
           <div class="score-group ${state.settings.standard === "APCA" ? "inactive-standard" : "active-standard"}">
@@ -929,7 +952,11 @@ function renderIssues() {
         ? issue.apcaLevel === "Fail"
         : issue.wcagLevel === "Fail" || issue.wcagLevel === "AA Large";
 
-    if (isFail && issue.type !== "target-size") {
+    if (
+      isFail &&
+      issue.type !== "target-size" &&
+      issue.type !== "link-contrast"
+    ) {
       const suggestedFg = suggestPassingColor(issue.textColor, issue.bgColor);
       const suggestedBg = suggestPassingColor(issue.bgColor, issue.textColor);
       const apcaReq =
@@ -976,6 +1003,26 @@ function renderIssues() {
                 : ""
             }
           </div>
+          ${
+            state.settings.githubRepoUrl
+              ? `
+          <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; display: flex; justify-content: flex-end;">
+            <a href="${state.settings.githubRepoUrl.replace(
+              /\/$/,
+              "",
+            )}/issues/new?title=${encodeURIComponent(
+              `[a11y] Contrast failure on ${issue.tagName} element`,
+            )}&body=${encodeURIComponent(
+              `**WCAG Score:** ${formatContrastRatio(issue.wcagRatio)} (${issue.wcagLevel})\n**APCA Score:** ${formatAPCAScore(issue.apcaScore)} (${issue.apcaLevel})\n**Selector:** \`${issue.selector}\`\n\n**Current Value:**\n- Text: \`${issue.textColor}\`\n- Background: \`${issue.bgColor}\`\n\n**Suggested Fixes:**\n${
+                suggestedFg ? `- Change foreground to \`${suggestedFg}\`\n` : ""
+              }${suggestedBg ? `- Change background to \`${suggestedBg}\`\n` : ""}`,
+            )}" target="_blank" class="btn-xs" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+              Create Issue
+            </a>
+          </div>`
+              : ""
+          }
         </div>
       `;
       row.innerHTML += fixHtml;
@@ -1182,6 +1229,23 @@ async function handleExtract() {
   state.elementPairs = pairsResponse?.pairs || [];
   state.issues = buildIssuesData(state.elementPairs);
 
+  if (state.settings.consoleWarnings && state.issues.length > 0) {
+    const activeTab = await getActiveTab();
+    if (activeTab?.id) {
+      void sendToTab(activeTab.id, {
+        action: "logWarnings",
+        warnings: state.issues.map((i) => ({
+          selector: i.selector,
+          type: i.type,
+          wcagRatio: i.wcagRatio,
+          wcagLevel: i.wcagLevel,
+          apcaScore: i.apcaScore,
+          apcaLevel: i.apcaLevel,
+        })),
+      });
+    }
+  }
+
   render();
 }
 
@@ -1252,8 +1316,10 @@ settingsBtn.addEventListener("click", () => {
   settingsPopover.style.display = "block";
   settingsPopover.setAttribute("aria-hidden", "false");
   autoSyncToggle.checked = state.settings.autoSync;
+  consoleWarningsToggle.checked = state.settings.consoleWarnings || false;
   standardSelect.value = state.settings.standard || "WCAG21";
   cvdSelect.value = state.settings.cvdMode || "none";
+  githubRepoUrlInput.value = state.settings.githubRepoUrl || "";
 });
 
 closeSettingsBtn.addEventListener("click", () => {
@@ -1261,8 +1327,56 @@ closeSettingsBtn.addEventListener("click", () => {
   settingsPopover.setAttribute("aria-hidden", "true");
 });
 
+exportBtn.addEventListener("click", () => {
+  if (!state.colors.length && !state.elementPairs.length) {
+    statusBanner.textContent = "No data to export.";
+    statusBanner.className = "status-banner error";
+    statusBanner.style.display = "block";
+    return;
+  }
+
+  const payload = {
+    timestamp: new Date().toISOString(),
+    url: state.pageContext.url,
+    domain: state.pageContext.domain,
+    settings: state.settings,
+    metrics: getIssueSummary(),
+    palette: state.colors,
+    issues: state.issues.map((issue) => ({
+      id: issue.id,
+      type: issue.type,
+      selector: issue.selector,
+      tagName: issue.tagName,
+      fontSize: issue.fontSize,
+      fontWeight: issue.fontWeight,
+      textColor: issue.textColor,
+      bgColor: issue.bgColor,
+      wcagRatio: issue.wcagRatio,
+      wcagLevel: issue.wcagLevel,
+      apcaScore: issue.apcaScore,
+      apcaLevel: issue.apcaLevel,
+      textPreview: issue.textPreview,
+    })),
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `chromacheck-audit-${state.pageContext.domain.replace(/[^a-z0-9]/gi, "_")}-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
 autoSyncToggle.addEventListener("change", (e) => {
   toggleAutoSync(e.target.checked);
+});
+
+consoleWarningsToggle.addEventListener("change", async (e) => {
+  state.settings.consoleWarnings = e.target.checked;
+  await saveSettings();
 });
 
 standardSelect.addEventListener("change", (e) => {
@@ -1286,6 +1400,13 @@ cvdSelect.addEventListener("change", (e) => {
     state.issues = buildIssuesData(state.elementPairs);
     render();
   }
+});
+
+githubRepoUrlInput.addEventListener("input", (e) => {
+  state.settings.githubRepoUrl = e.target.value.trim();
+  void saveSettings();
+  // Rerender so actionable fixes recalculate Github issue buttons
+  if (state.issues.length) renderIssues();
 });
 
 historyList.addEventListener("click", async (e) => {

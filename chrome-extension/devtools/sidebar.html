@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../popup/popup.css" />
+    <style>
+      body {
+        margin: 0;
+        padding: 12px;
+        background-color: var(--bg-main);
+        min-height: 100vh;
+      }
+      .sidebar-empty {
+        text-align: center;
+        color: var(--text-secondary);
+        font-size: 13px;
+        padding: 20px 0;
+      }
+      .element-info {
+        margin-bottom: 12px;
+      }
+      .sidebar-issue-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="content">
+      <div class="sidebar-empty">Select an element to analyze contrast.</div>
+    </div>
+
+    <script src="../shared/contrast.js"></script>
+    <script src="sidebar.js"></script>
+  </body>
+</html>

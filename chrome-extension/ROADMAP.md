@@ -58,7 +58,7 @@ This is where most tools stop. axe tells you something fails. Lighthouse gives y
 
 - [ ] **Auto-Suggest Nearest Passing Color** - For every failing pair, compute the minimum adjustment to the text or background color that achieves AA (or AAA). Suggest the nearest color in the same hue family, preserving design intent. Show both "adjust text" and "adjust background" options.
 - [ ] **APCA-Aware Font Size Recommendations** - APCA's power is that it maps contrast to minimum font sizes. For every pair, show: "This contrast (Lc 48) requires minimum 24px / 700 weight for body text." Use the APCA lookup table for Bronze, Silver, and Gold conformance.
-- [ ] **Live Preview Fixes on Page** - Inject a temporary stylesheet to preview the suggested fix directly on the page. Toggle between original and fixed. No page reload.
+- [x] **Live Preview Fixes on Page** - Inject a temporary stylesheet to preview the suggested fix directly on the page. Toggle between original and fixed. No page reload.
 - [ ] **One-Click Copy Fix** - Copy the fix as a CSS rule: `/* ChromaCheck fix: contrast 3.2:1 -> 4.5:1 */ .hero-title { color: #1a3a5c; }`. Ready to paste into a stylesheet.
 - [ ] **Batch Fix Mode** - Select multiple failing pairs and generate a single CSS patch file that fixes all of them.
 - [ ] **Plain-Language Explanations** - Every failure should explain _why_ it matters and _who_ it affects, not just cite "WCAG 1.4.3." Example: "This text will be unreadable for the ~217 million people with moderate visual impairments. Increasing contrast to 4.5:1 fixes it." Teach while you flag.
@@ -71,10 +71,10 @@ This is where most tools stop. axe tells you something fails. Lighthouse gives y
 
 The main ChromaCheck app simulates color blindness on contrast cards. The extension should simulate it on the actual live page.
 
-- [ ] **Full-Page SVG Filter Overlay** - Apply color blindness simulation filters to the entire page via an injected `<svg>` + CSS `filter` on `<html>`. Support all 8 simulation types (protanopia, deuteranopia, tritanopia, protanomaly, deuteranomaly, tritanomaly, achromatopsia, achromatomaly).
+- [x] **Full-Page SVG Filter Overlay** - Apply color blindness simulation filters to the entire page via an injected `<svg>` + CSS `filter` on `<html>`. Support all 8 simulation types (protanopia, deuteranopia, tritanopia, protanomaly, deuteranomaly, tritanomaly, achromatopsia, achromatomaly).
 - [ ] **Quick Toggle Bar** - Inject a minimal floating toolbar at the top of the page for fast switching between simulation types. Keyboard shortcut support (e.g., `Alt+Shift+1` through `Alt+Shift+8`).
 - [ ] **Split-Screen Comparison** - Side-by-side view: left half of the page in normal vision, right half in simulated vision. Draggable divider.
-- [ ] **Simulation-Aware Contrast Analysis** - Re-run the contrast matrix with simulated colors. "Under deuteranopia, 3 additional pairs drop below AA." Show which pairs are only problematic under specific simulations.
+- [x] **Simulation-Aware Contrast Analysis** - Re-run the contrast matrix with simulated colors. "Under deuteranopia, 3 additional pairs drop below AA." Show which pairs are only problematic under specific simulations.
 - [ ] **Low Vision Simulation** - Beyond color blindness: simulate blur (low acuity), reduced contrast sensitivity, and visual field loss. These affect more users than color blindness.
 
 ---
@@ -85,11 +85,11 @@ The main ChromaCheck app simulates color blindness on contrast cards. The extens
 
 Every other tool bolts APCA on as a secondary score next to WCAG 2.1. ChromaCheck should be the tool that actually implements the APCA workflow as intended by its designers.
 
-- [ ] **APCA Lookup Table Integration** - Implement the full APCA Bronze/Silver/Gold conformance table. Map each Lc value to minimum font size and weight, not just a pass/fail threshold. Show "Lc 52: 18px/700 or 24px/400 minimum" instead of just "AA Large."
-- [ ] **Font-Size-Aware Scoring** - The element picker already knows the element. Read its `font-size` and `font-weight`. Cross-reference with the APCA table to give a verdict specific to that element's actual typography: "This 14px/400 text needs Lc 75+, but only has Lc 58. Increase to 18px or boost contrast."
+- [x] **APCA Lookup Table Integration** - Implement the full APCA Bronze/Silver/Gold conformance table. Map each Lc value to minimum font size and weight, not just a pass/fail threshold. Show "Lc 52: 18px/700 or 24px/400 minimum" instead of just "AA Large."
+- [x] **Font-Size-Aware Scoring** - The element picker already knows the element. Read its `font-size` and `font-weight`. Cross-reference with the APCA table to give a verdict specific to that element's actual typography: "This 14px/400 text needs Lc 75+, but only has Lc 58. Increase to 18px or boost contrast."
 - [ ] **Polarity-Aware UI** - APCA distinguishes dark-on-light (positive Lc) from light-on-dark (negative Lc). Make this visible in the UI. Different thresholds apply to each polarity.
 - [ ] **WCAG 2.2 Compliance Mode** - Support WCAG 2.2 additions: focus appearance (SC 2.4.11, 2.4.12 -- 3:1 contrast for focus indicators), target size, and dragging movements. Detect focus styles on interactive elements and validate their contrast.
-- [ ] **Standard Toggle** - Let users switch the primary scoring between "WCAG 2.1", "WCAG 2.2", and "APCA (WCAG 3.0 Draft)". Filter badges and pass/fail thresholds update accordingly. Default to the user's preferred standard.
+- [x] **Standard Toggle** - Let users switch the primary scoring between "WCAG 2.1", "WCAG 2.2", and "APCA (WCAG 3.0 Draft)". Filter badges and pass/fail thresholds update accordingly. Default to the user's preferred standard.
 
 ---
 
@@ -101,10 +101,10 @@ WCAG 1.4.11 (Non-text Contrast) requires 3:1 for UI components and graphical obj
 
 - [ ] **UI Component Contrast** - Detect buttons, inputs, checkboxes, and other form controls. Check their border/outline contrast against their background. Flag inputs that disappear into their container.
 - [ ] **Focus Indicator Audit** - Tab through the page programmatically. Capture the focus style of each interactive element. Check the focus indicator's contrast against both the element and its surrounding background.
-- [ ] **Icon & SVG Contrast** - Detect inline SVGs and icon fonts. Measure their fill/stroke color against the background. Flag icons that rely solely on color to convey meaning.
+- [x] **Icon & SVG Contrast** - Detect inline SVGs and icon fonts. Measure their fill/stroke color against the background. Flag icons that rely solely on color to convey meaning.
 - [ ] **Link Distinguishability** - WCAG 1.4.1 requires links within text to be distinguishable by more than color alone (or have 3:1 contrast with surrounding text). Detect links inside paragraphs, check if they have underlines or sufficient contrast against body text.
-- [ ] **Placeholder Text Contrast** - Check `::placeholder` contrast against input backgrounds. This is one of the most commonly failed checks on the web.
-- [ ] **Target Size Checking (WCAG 2.2)** - Measure interactive element dimensions against the new SC 2.5.8 requirement (24x24 CSS pixels minimum). Flag undersized buttons, links, and controls. This is WCAG 2.2's most automatable new success criterion and almost no tool checks it yet.
+- [x] **Placeholder Text Contrast** - Check `::placeholder` contrast against input backgrounds. This is one of the most commonly failed checks on the web.
+- [x] **Target Size Checking (WCAG 2.2)** - Measure interactive element dimensions against the new SC 2.5.8 requirement (24x24 CSS pixels minimum). Flag undersized buttons, links, and controls. This is WCAG 2.2's most automatable new success criterion and almost no tool checks it yet.
 - [ ] **Dark Mode & Theme-Aware Testing** - Detect `prefers-color-scheme` media queries and CSS custom property theming. Toggle between light/dark/high-contrast modes and re-run the full analysis for each. "Your palette passes AA in light mode but has 6 failures in dark mode." Test `forced-colors` mode for Windows High Contrast users.
 
 ---
@@ -115,11 +115,11 @@ WCAG 1.4.11 (Non-text Contrast) requires 3:1 for UI components and graphical obj
 
 Individual developer tools don't change organizations. Reports, dashboards, and integrations do.
 
-- [ ] **Exportable Audit Report** - One-click export to HTML, PDF, or JSON. The report includes: page URL, timestamp, total issues by severity, each failing pair with screenshot snippet, CSS selector, current values, and suggested fix.
-- [ ] **CSV/JSON for CI Integration** - Export raw data in machine-readable format for ingestion into CI pipelines, dashboards, or accessibility tracking systems.
-- [ ] **GitHub Issue Generator** - For each failure (or batch of failures), generate a pre-formatted GitHub issue with reproduction details, WCAG success criterion reference, and suggested fix. Uses the GitHub API via OAuth.
+- [x] **Exportable Audit Report** - One-click export to HTML, PDF, or JSON. The report includes: page URL, timestamp, total issues by severity, each failing pair with screenshot snippet, CSS selector, current values, and suggested fix.
+- [x] **CSV/JSON for CI Integration** - Export raw data in machine-readable format for ingestion into CI pipelines, dashboards, or accessibility tracking systems.
+- [x] **GitHub Issue Generator** - For each failure (or batch of failures), generate a pre-formatted GitHub issue with reproduction details, WCAG success criterion reference, and suggested fix. Uses the GitHub API via OAuth.
 - [ ] **Comparison Across Pages** - Scan multiple pages on the same domain. Aggregate results: "Your site has 47 unique contrast failures across 12 pages. The 5 most impactful fixes would resolve 80% of them."
-- [ ] **Design Token Extraction** - Detect CSS custom properties (`--color-primary`, `--bg-surface`, etc.) and Tailwind classes. Report issues in terms of the design system, not raw hex values: "Your `--text-muted` token fails AA on `--bg-surface`."
+- [x] **Design Token Extraction** - Detect CSS custom properties (`--color-primary`, `--bg-surface`, etc.) and Tailwind classes. Report issues in terms of the design system, not raw hex values: "Your `--text-muted` token fails AA on `--bg-surface`."
 
 ---
 
@@ -129,10 +129,10 @@ Individual developer tools don't change organizations. Reports, dashboards, and 
 
 Power users live in DevTools. A dedicated panel there removes friction entirely.
 
-- [ ] **DevTools Panel** - Register a "ChromaCheck" panel in Chrome DevTools via `devtools_page`. Show the full analysis UI alongside Elements, Console, and Network.
-- [ ] **Elements Panel Integration** - In the Elements panel sidebar, show a "Contrast" pane for the currently inspected element. Auto-updates as you navigate the DOM tree.
+- [x] **DevTools Panel** - Register a "ChromaCheck" panel in Chrome DevTools via `devtools_page`. Show the full analysis UI alongside Elements, Console, and Network.
+- [x] **Elements Panel Integration** - In the Elements panel sidebar, show a "Contrast" pane for the currently inspected element. Auto-updates as you navigate the DOM tree.
 - [ ] **Computed Style Annotations** - Augment the Computed tab with contrast ratios next to `color` and `background-color` properties. Green/yellow/red indicators.
-- [ ] **Console Warnings** - Optionally inject `console.warn()` messages for each contrast failure found during page load. Developers see failures in their normal workflow without opening any panel.
+- [x] **Console Warnings** - Optionally inject `console.warn()` messages for each contrast failure found during page load. Developers see failures in their normal workflow without opening any panel.
 
 ---
 
@@ -142,8 +142,8 @@ Power users live in DevTools. A dedicated panel there removes friction entirely.
 
 Production sites have 5,000+ DOM elements, complex stacking contexts, iframes, shadow DOM, and web components. The tool must be fast and correct on all of them.
 
-- [ ] **Shadow DOM Traversal** - Pierce shadow roots (open) to extract colors from web components. Custom elements are increasingly common, and most tools ignore them entirely.
-- [ ] **Iframe Analysis** - With appropriate permissions, analyze content inside same-origin iframes. Common in CMS platforms, embedded widgets, and design tools.
+- [x] **Shadow DOM Traversal** - Pierce shadow roots (open) to extract colors from web components. Custom elements are increasingly common, and most tools ignore them entirely.
+- [x] **Iframe Analysis** - With appropriate permissions, analyze content inside same-origin iframes. Common in CMS platforms, embedded widgets, and design tools.
 - [ ] **Incremental Scanning** - Don't re-walk the entire DOM on every analysis. Use `MutationObserver` to track changes and only re-analyze affected subtrees.
 - [ ] **Web Worker Offloading** - Move contrast calculations to a Web Worker so the main thread stays responsive during large-page scans.
 - [ ] **Viewport-Priority Scanning** - Analyze above-the-fold content first. Show initial results in <500ms, then progressively scan below-the-fold content.
@@ -154,11 +154,11 @@ Production sites have 5,000+ DOM elements, complex stacking contexts, iframes, s
 
 **Goal: Go wherever the users are.**
 
-- [ ] **Firefox Add-on** - Port to Firefox using WebExtension APIs (high compatibility with Manifest V3). Firefox's accessibility community is strong and underserved.
+- [x] **Firefox Add-on** - Port to Firefox using WebExtension APIs (high compatibility with Manifest V3). Firefox's accessibility community is strong and underserved.
 - [ ] **Safari Web Extension** - Port to Safari via Xcode Web Extension conversion. Critical for testing on macOS/iOS rendering.
 - [ ] **Figma Plugin Bridge** - Detect design tokens from Figma-exported CSS. Allow round-tripping: scan a page, export failures, open in ChromaCheck web app for detailed analysis with the full palette editor.
 - [ ] **Storybook Addon** - Analyze component variants in isolation. "Your Button component passes in all variants except `variant=ghost` on dark backgrounds."
-- [ ] **CLI / Node API** - Headless version for CI/CD pipelines. `npx chromacheck audit https://example.com --format=json --threshold=AA`. Exit code 1 on failures for pipeline gating.
+- [x] **CLI / Node API** - Headless version for CI/CD pipelines. `npx chromacheck audit https://example.com --format=json --threshold=AA`. Exit code 1 on failures for pipeline gating.
 
 ---
 

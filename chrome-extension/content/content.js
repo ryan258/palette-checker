@@ -248,6 +248,49 @@
     return parts.join(" > ") || el.tagName.toLowerCase();
   }
 
+  let tokenCache = null;
+
+  function buildTokenMap() {
+    if (tokenCache) return tokenCache;
+    tokenCache = new Map();
+    try {
+      [...document.styleSheets].forEach((sheet) => {
+        try {
+          [...sheet.cssRules].forEach((rule) => {
+            if (rule.type === 1 && rule.selectorText === ":root") {
+              for (let i = 0; i < rule.style.length; i++) {
+                const prop = rule.style[i];
+                if (prop.startsWith("--")) {
+                  const value = rule.style.getPropertyValue(prop).trim();
+                  const dummy = document.createElement("div");
+                  dummy.style.backgroundColor = value;
+                  if (dummy.style.backgroundColor) {
+                    document.body.appendChild(dummy);
+                    const computedStr =
+                      window.getComputedStyle(dummy).backgroundColor;
+                    const hex = rgbToHex(computedStr);
+                    if (hex) {
+                      if (
+                        !tokenCache.has(hex) ||
+                        tokenCache.get(hex).length > prop.length
+                      ) {
+                        tokenCache.set(hex.toLowerCase(), prop);
+                      }
+                    }
+                    document.body.removeChild(dummy);
+                  }
+                }
+              }
+            }
+          });
+        } catch (e) {
+          // Ignore cross-origin stylesheet errors
+        }
+      });
+    } catch (e) {}
+    return tokenCache;
+  }
+
   function getDirectText(el) {
     let text = "";
     for (const node of el.childNodes) {
@@ -265,38 +308,46 @@
 
     const pairs = [];
     const processed = new Set();
+    const tokenMap = buildTokenMap();
     let idCounter = 0;
 
-    const walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_TEXT,
-      {
-        acceptNode(node) {
-          return node.textContent.trim().length > 0
-            ? NodeFilter.FILTER_ACCEPT
-            : NodeFilter.FILTER_REJECT;
-        },
-      },
-    );
+    function walkNodes(rootNode) {
+      if (rootNode.nodeType === Node.ELEMENT_NODE) {
+        if (rootNode.shadowRoot) {
+          walkNodes(rootNode.shadowRoot);
+        }
+        if (rootNode.id && rootNode.id.startsWith("chromacheck")) return;
+        if (
+          rootNode.closest &&
+          rootNode.closest(
+            "#chromacheck-picker-overlay, #chromacheck-picker-tooltip",
+          )
+        )
+          return;
+      }
 
-    while (walker.nextNode()) {
-      const el = walker.currentNode.parentElement;
-      if (!el || processed.has(el)) continue;
-      processed.add(el);
+      for (const node of rootNode.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (node.textContent.trim().length > 0) {
+            const el = node.parentElement;
+            if (el && !processed.has(el)) {
+              processed.add(el);
+              if (isContentVisible(el)) {
+                processTextElement(el);
+              }
+            }
+          }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          walkNodes(node);
+        }
+      }
+    }
 
-      if (el.id && el.id.startsWith("chromacheck")) continue;
-      if (
-        el.closest("#chromacheck-picker-overlay, #chromacheck-picker-tooltip")
-      )
-        continue;
-
-      if (!isContentVisible(el)) continue;
-
+    function processTextElement(el) {
       const directText = getDirectText(el);
-      if (!directText) continue;
+      if (!directText) return;
 
       const style = window.getComputedStyle(el);
-
       const textRGBA = parseRGBA(style.color);
       if (textRGBA && textRGBA.a > 0) {
         const renderedPair = getRenderedPair(el, textRGBA);
@@ -309,7 +360,9 @@
           pairs.push({
             id,
             textColor,
+            textColorToken: tokenMap.get(textColor),
             bgColor,
+            bgColorToken: tokenMap.get(bgColor),
             selector: getMinimalSelector(el),
             textPreview: directText.slice(0, 60),
             tagName: el.tagName.toLowerCase(),
@@ -350,124 +403,182 @@
       }
     }
 
+    // Phase 6: Link Distinguishability (WCAG 1.4.1)
+    queryAllDeep("p a, li a, blockquote a, dd a, dt a").forEach((linkEl) => {
+      const parentEl = linkEl.parentElement;
+      if (!parentEl || !isVisible(linkEl)) return;
+
+      const linkStyle = window.getComputedStyle(linkEl);
+      const parentStyle = window.getComputedStyle(parentEl);
+
+      // Links without underlines must have 3:1 contrast with surrounding text
+      if (!linkStyle.textDecorationLine.includes("underline")) {
+        const linkColorHex = rgbToHex(linkStyle.color);
+        const parentColorHex = rgbToHex(parentStyle.color);
+
+        if (linkColorHex && parentColorHex && linkColorHex !== parentColorHex) {
+          const id =
+            linkEl.getAttribute("data-chromacheck-id") || String(idCounter++);
+          linkEl.setAttribute("data-chromacheck-id", id);
+
+          pairs.push({
+            id,
+            textColor: linkColorHex,
+            bgColor: parentColorHex,
+            selector: getMinimalSelector(linkEl),
+            textPreview: `Link missing underline needs 3:1 against text`,
+            tagName: "a",
+            fontSize: linkStyle.fontSize,
+            fontWeight: linkStyle.fontWeight,
+            type: "link-contrast",
+          });
+        }
+      }
+    });
+
+    // Start text traversal
+    walkNodes(document.body);
+
+    // Helper for finding elements across shadow boundaries
+    function queryAllDeep(selector, root = document.body) {
+      const results = [];
+      const stack = [root];
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (node.shadowRoot) stack.push(node.shadowRoot);
+
+        if (node.querySelectorAll) {
+          results.push(...node.querySelectorAll(selector));
+        }
+
+        // Add child elements to stack
+        for (const child of node.children || []) {
+          stack.push(child);
+        }
+      }
+      return results;
+    }
+
     // Phase 6: SVGs and Non-text Contrast
-    document
-      .querySelectorAll("svg, path, circle, rect, polygon")
-      .forEach((svgEl) => {
-        if (processed.has(svgEl)) return;
-        if (!isContentVisible(svgEl)) return;
+    queryAllDeep("svg, path, circle, rect, polygon").forEach((svgEl) => {
+      if (processed.has(svgEl)) return;
+      if (!isContentVisible(svgEl)) return;
 
-        const style = window.getComputedStyle(svgEl);
-        const fill = style.fill;
-        const stroke = style.stroke;
+      const style = window.getComputedStyle(svgEl);
+      const fill = style.fill;
+      const stroke = style.stroke;
 
-        let targetColor = "none";
-        if (fill && fill !== "none" && fill !== "rgba(0, 0, 0, 0)")
-          targetColor = fill;
-        else if (stroke && stroke !== "none" && stroke !== "rgba(0, 0, 0, 0)")
-          targetColor = stroke;
+      let targetColor = "none";
+      if (fill && fill !== "none" && fill !== "rgba(0, 0, 0, 0)")
+        targetColor = fill;
+      else if (stroke && stroke !== "none" && stroke !== "rgba(0, 0, 0, 0)")
+        targetColor = stroke;
 
-        if (targetColor === "none") return;
+      if (targetColor === "none") return;
 
-        const rgba = parseRGBA(targetColor);
-        if (!rgba || rgba.a === 0) return;
+      const rgba = parseRGBA(targetColor);
+      if (!rgba || rgba.a === 0) return;
 
-        const renderedPair = getRenderedPair(svgEl, rgba);
-        const fgHex = componentsToHex(renderedPair.text);
-        const bgHex = componentsToHex(renderedPair.background);
+      const renderedPair = getRenderedPair(svgEl, rgba);
+      const fgHex = componentsToHex(renderedPair.text);
+      const bgHex = componentsToHex(renderedPair.background);
 
-        if (fgHex === bgHex) return;
+      if (fgHex === bgHex) return;
 
-        const id = String(idCounter++);
-        svgEl.setAttribute("data-chromacheck-id", id);
-        pairs.push({
-          id,
-          textColor: fgHex,
-          bgColor: bgHex,
-          selector: getMinimalSelector(svgEl),
-          textPreview: `<${svgEl.tagName.toLowerCase()}>\u200B icon or graphic`,
-          tagName: svgEl.tagName.toLowerCase(),
-          fontSize: "24px", // Assume large for graphical objects in WCAG 2.1 mapping
-          fontWeight: "400",
-          type: "non-text",
-        });
+      const id = String(idCounter++);
+      svgEl.setAttribute("data-chromacheck-id", id);
+      pairs.push({
+        id,
+        textColor: fgHex,
+        textColorToken: tokenMap.get(fgHex),
+        bgColor: bgHex,
+        bgColorToken: tokenMap.get(bgHex),
+        selector: getMinimalSelector(svgEl),
+        textPreview: `<${svgEl.tagName.toLowerCase()}>\u200B icon or graphic`,
+        tagName: svgEl.tagName.toLowerCase(),
+        fontSize: "24px", // Assume large for graphical objects in WCAG 2.1 mapping
+        fontWeight: "400",
+        type: "non-text",
       });
+    });
 
     // Phase 6: Borders and Inputs
-    document
-      .querySelectorAll(
-        "input, textarea, select, button, .border, [style*='border']",
-      )
-      .forEach((el) => {
-        if (!isContentVisible(el)) return;
-        const style = window.getComputedStyle(el);
-        // Check borders if they have width
-        const borderDirs = ["Top", "Right", "Bottom", "Left"];
-        let hasBorder = false;
-        for (const dir of borderDirs) {
-          if (
-            parseFloat(style[`border${dir}Width`]) > 0 &&
-            style[`border${dir}Style`] !== "none"
-          ) {
-            const borderRgba = parseRGBA(style[`border${dir}Color`]);
-            if (borderRgba && borderRgba.a > 0) {
-              const renderedPair = getRenderedPair(
-                el.parentElement || el,
-                borderRgba,
-              );
-              const fgHex = componentsToHex(renderedPair.text);
-              const bgHex = componentsToHex(renderedPair.background);
-              if (fgHex !== bgHex) {
-                const id =
-                  el.getAttribute("data-chromacheck-id") || String(idCounter++);
-                el.setAttribute("data-chromacheck-id", id);
-                pairs.push({
-                  id,
-                  textColor: fgHex,
-                  bgColor: bgHex,
-                  selector: getMinimalSelector(el),
-                  textPreview: `Border Contrast (${dir})`,
-                  tagName: el.tagName.toLowerCase(),
-                  fontSize: "24px", // Map graphical to large text equivalent logic
-                  fontWeight: "400",
-                  type: "non-text",
-                });
-                hasBorder = true;
-                break; // Just log one border fail per element to reduce noise
-              }
+    queryAllDeep(
+      "input, textarea, select, button, .border, [style*='border']",
+    ).forEach((el) => {
+      if (!isContentVisible(el)) return;
+      const style = window.getComputedStyle(el);
+      // Check borders if they have width
+      const borderDirs = ["Top", "Right", "Bottom", "Left"];
+      let hasBorder = false;
+      for (const dir of borderDirs) {
+        if (
+          parseFloat(style[`border${dir}Width`]) > 0 &&
+          style[`border${dir}Style`] !== "none"
+        ) {
+          const borderRgba = parseRGBA(style[`border${dir}Color`]);
+          if (borderRgba && borderRgba.a > 0) {
+            const renderedPair = getRenderedPair(
+              el.parentElement || el,
+              borderRgba,
+            );
+            const fgHex = componentsToHex(renderedPair.text);
+            const bgHex = componentsToHex(renderedPair.background);
+            if (fgHex !== bgHex) {
+              const id =
+                el.getAttribute("data-chromacheck-id") || String(idCounter++);
+              el.setAttribute("data-chromacheck-id", id);
+              pairs.push({
+                id,
+                textColor: fgHex,
+                textColorToken: tokenMap.get(fgHex),
+                bgColor: bgHex,
+                bgColorToken: tokenMap.get(bgHex),
+                selector: getMinimalSelector(el),
+                textPreview: `Border Contrast (${dir})`,
+                tagName: el.tagName.toLowerCase(),
+                fontSize: "24px", // Map graphical to large text equivalent logic
+                fontWeight: "400",
+                type: "non-text",
+              });
+              hasBorder = true;
+              break; // Just log one border fail per element to reduce noise
             }
           }
         }
+      }
 
-        // Placeholders
-        if (
-          ["input", "textarea"].includes(el.tagName.toLowerCase()) &&
-          el.placeholder
-        ) {
-          const phStyle = window.getComputedStyle(el, "::placeholder");
-          const phRgba = parseRGBA(phStyle.color);
-          if (phRgba && phRgba.a > 0) {
-            const bgRgba = parseRGBA(style.backgroundColor);
-            const renderedPair = getRenderedPair(el, phRgba); // approximate bg
-            const fgHex = componentsToHex(renderedPair.text);
-            const bgHex = componentsToHex(renderedPair.background);
+      // Placeholders
+      if (
+        ["input", "textarea"].includes(el.tagName.toLowerCase()) &&
+        el.placeholder
+      ) {
+        const phStyle = window.getComputedStyle(el, "::placeholder");
+        const phRgba = parseRGBA(phStyle.color);
+        if (phRgba && phRgba.a > 0) {
+          const bgRgba = parseRGBA(style.backgroundColor);
+          const renderedPair = getRenderedPair(el, phRgba); // approximate bg
+          const fgHex = componentsToHex(renderedPair.text);
+          const bgHex = componentsToHex(renderedPair.background);
 
-            const id = String(idCounter++);
-            el.setAttribute("data-chromacheck-ph-id", id); // Different attribute to not conflict with base element
-            pairs.push({
-              id,
-              textColor: fgHex,
-              bgColor: bgHex,
-              selector: `${getMinimalSelector(el)}::placeholder`,
-              textPreview: `Placeholder text`,
-              tagName: el.tagName.toLowerCase(),
-              fontSize: phStyle.fontSize || style.fontSize,
-              fontWeight: phStyle.fontWeight || style.fontWeight,
-              type: "placeholder",
-            });
-          }
+          const id = String(idCounter++);
+          el.setAttribute("data-chromacheck-ph-id", id); // Different attribute to not conflict with base element
+          pairs.push({
+            id,
+            textColor: fgHex,
+            textColorToken: tokenMap.get(fgHex),
+            bgColor: bgHex,
+            bgColorToken: tokenMap.get(bgHex),
+            selector: `${getMinimalSelector(el)}::placeholder`,
+            textPreview: `Placeholder text`,
+            tagName: el.tagName.toLowerCase(),
+            fontSize: phStyle.fontSize || style.fontSize,
+            fontWeight: phStyle.fontWeight || style.fontWeight,
+            type: "placeholder",
+          });
         }
-      });
+      }
+    });
 
     return pairs;
   }
@@ -718,6 +829,30 @@
     }
     if (message.action === "highlightElement") {
       sendResponse({ ok: highlightElement(message.id) });
+      return false;
+    }
+    if (message.action === "logWarnings") {
+      const warnings = message.warnings;
+      if (warnings && warnings.length > 0) {
+        console.group(
+          `%c🎨 ChromaCheck: Found ${warnings.length} contrast issues`,
+          "color: #ef4444; font-weight: bold; font-size: 1.1em;",
+        );
+        warnings.forEach((w) => {
+          const m =
+            w.type === "apca"
+              ? `Score: ${w.apcaScore} | Level: ${w.apcaLevel}`
+              : `Ratio: ${w.wcagRatio} | Level: ${w.wcagLevel}`;
+          console.warn(
+            `%c[${w.type.toUpperCase()}]%c ${w.selector}\n   %c${m}`,
+            "color: #ef4444; font-weight: bold;",
+            "color: inherit; font-weight: bold;",
+            "color: gray;",
+          );
+        });
+        console.groupEnd();
+      }
+      sendResponse({ ok: true });
       return false;
     }
     return false;
