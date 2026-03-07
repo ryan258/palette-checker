@@ -421,6 +421,30 @@ function summarizeIssuesForStorage(issues) {
   }));
 }
 
+function summarizeIssueList(issues, settings = state.settings) {
+  let fails = 0;
+  let warnings = 0;
+
+  issues.forEach((issue) => {
+    if (settings.standard === "APCA") {
+      if (issue.apcaLevel === "Fail") {
+        fails += 1;
+      } else if (issue.apcaLevel === "AA Large") {
+        warnings += 1;
+      }
+      return;
+    }
+
+    if (issue.wcagLevel === "Fail") {
+      fails += 1;
+    } else if (issue.wcagLevel === "AA Large") {
+      warnings += 1;
+    }
+  });
+
+  return { total: issues.length, fails, warnings };
+}
+
 function computeScanDiff(previousScan, currentIssues) {
   if (!previousScan?.issues?.length) {
     return null;
