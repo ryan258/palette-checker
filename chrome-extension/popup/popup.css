@@ -204,6 +204,10 @@ body::-webkit-scrollbar-thumb {
   margin-top: 16px;
 }
 
+.header-actions-audit {
+  margin-top: 10px;
+}
+
 .status-banner {
   padding: 12px 14px;
   border-radius: var(--radius-md);
@@ -902,6 +906,52 @@ body::-webkit-scrollbar-thumb {
 .diff-summary {
   padding: 0 16px 16px;
   color: var(--text-secondary);
+}
+
+.theme-summary {
+  padding: 0 16px 12px;
+  color: var(--text-secondary);
+}
+
+.theme-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.theme-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.42);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.theme-row strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.theme-row p {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.theme-note {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.24);
+  color: #bae6fd;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .pinned-row-alert {

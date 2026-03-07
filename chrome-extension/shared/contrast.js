@@ -295,16 +295,23 @@ function suggestPassingColor(hexToChange, fixedHex, targetRatio = 4.5) {
 function getSuggestedFixes(textHex, bgHex, targetRatio = 4.5) {
   const originalText = textHex.toLowerCase();
   const originalBg = bgHex.toLowerCase();
-  const textSuggestion = suggestPassingColor(originalText, originalBg, targetRatio);
-  const bgSuggestion = suggestPassingColor(originalBg, originalText, targetRatio);
+  const textSuggestion = suggestPassingColor(
+    originalText,
+    originalBg,
+    targetRatio,
+  );
+  const bgSuggestion = suggestPassingColor(
+    originalBg,
+    originalText,
+    targetRatio,
+  );
 
   const buildOption = (property, original, suggestion, other) => {
     if (!suggestion) return null;
 
     const beforeRatio = getContrastRatio(originalText, originalBg);
     const nextText = property === "color" ? suggestion : originalText;
-    const nextBg =
-      property === "background-color" ? suggestion : originalBg;
+    const nextBg = property === "background-color" ? suggestion : originalBg;
     const afterRatio = getContrastRatio(nextText, nextBg);
     const originalHsl = hexToHsl(original);
     const nextHsl = hexToHsl(suggestion);
@@ -375,14 +382,16 @@ function getAPCAPolarity(lc) {
     return {
       key: "dark-on-light",
       label: "Dark text on light",
-      description: "Positive APCA polarity. Dark foreground over a lighter background.",
+      description:
+        "Positive APCA polarity. Dark foreground over a lighter background.",
     };
   }
 
   return {
     key: "light-on-dark",
     label: "Light text on dark",
-    description: "Negative APCA polarity. Light foreground over a darker background.",
+    description:
+      "Negative APCA polarity. Light foreground over a darker background.",
   };
 }
 
@@ -461,12 +470,123 @@ function simulateCVD(hex, type) {
   return `#${toHex(nr)}${toHex(ng)}${toHex(nb)}`;
 }
 
+function buildCombinationsData(colors, settings) {
+  const uniqueColors = [...new Set(Array.isArray(colors) ? colors : [])];
+  const combinations = [];
+  const cvdMode = settings?.cvdMode || "none";
+
+  for (let i = 0; i < uniqueColors.length; i += 1) {
+    for (let j = 0; j < uniqueColors.length; j += 1) {
+      if (i === j) continue;
+
+      const textHex = uniqueColors[i];
+      const bgHex = uniqueColors[j];
+      const simText = simulateCVD(textHex, cvdMode);
+      const simBg = simulateCVD(bgHex, cvdMode);
+
+      const wcagRatio = getContrastRatio(simText, simBg);
+      const wcagLevel = getContextualComplianceLevel(wcagRatio, 16, 400);
+      const apcaScore = calcAPCA(simText, simBg);
+      const apcaLevel = getAPCAComplianceLevel(apcaScore, 16, 400);
+
+      combinations.push({
+        textHex,
+        bgHex,
+        wcagRatio,
+        wcagLevel,
+        apcaScore,
+        apcaLevel,
+      });
+    }
+  }
+
+  return combinations.sort((a, b) => {
+    if (settings?.standard === "APCA") {
+      const levelDelta = getLevelRank(a.apcaLevel) - getLevelRank(b.apcaLevel);
+      if (levelDelta !== 0) return levelDelta;
+      return Math.abs(a.apcaScore) - Math.abs(b.apcaScore);
+    }
+
+    const levelDelta = getLevelRank(a.wcagLevel) - getLevelRank(b.wcagLevel);
+    if (levelDelta !== 0) return levelDelta;
+    return a.wcagRatio - b.wcagRatio;
+  });
+}
+
+function shouldAnalyzePair(pair, settings) {
+  if (!pair || typeof pair !== "object") return false;
+  if (pair.type === "focus-indicator") {
+    return settings?.standard === "WCAG22";
+  }
+  return shouldIncludeIssueType(pair.type, settings?.standard);
+}
+
+function buildIssuesData(pairs, settings) {
+  const cvdMode = settings?.cvdMode || "none";
+
+  return (Array.isArray(pairs) ? pairs : [])
+    .filter((pair) => shouldAnalyzePair(pair, settings))
+    .map((pair) => {
+      const simText = simulateCVD(pair.textColor, cvdMode);
+      const simBg = simulateCVD(pair.bgColor, cvdMode);
+
+      let wcagRatio = getContrastRatio(simText, simBg);
+      let wcagLevel = getContextualComplianceLevel(
+        wcagRatio,
+        pair.fontSize,
+        pair.fontWeight,
+      );
+      let apcaScore = calcAPCA(simText, simBg);
+      let apcaLevel = getAPCAComplianceLevel(
+        apcaScore,
+        pair.fontSize,
+        pair.fontWeight,
+      );
+
+      if (pair.type === "target-size") {
+        wcagRatio = 0;
+        wcagLevel = "Fail";
+        apcaScore = 0;
+        apcaLevel = "Fail";
+      } else if (pair.type === "focus-indicator") {
+        wcagLevel = wcagRatio >= 3 ? "AA Large" : "Fail";
+        apcaLevel = Math.abs(apcaScore) >= 45 ? "AA Large" : "Fail";
+      } else if (pair.type === "link-contrast") {
+        wcagLevel = wcagRatio >= 3 ? "AA Large" : "Fail";
+        apcaLevel = Math.abs(apcaScore) >= 45 ? "AA Large" : "Fail";
+      }
+
+      return {
+        ...pair,
+        wcagRatio,
+        wcagLevel,
+        apcaScore,
+        apcaLevel,
+      };
+    })
+    .sort((a, b) => {
+      if (settings?.standard === "APCA") {
+        const levelDelta =
+          getLevelRank(a.apcaLevel) - getLevelRank(b.apcaLevel);
+        if (levelDelta !== 0) return levelDelta;
+        return Math.abs(a.apcaScore) - Math.abs(b.apcaScore);
+      }
+
+      const levelDelta = getLevelRank(a.wcagLevel) - getLevelRank(b.wcagLevel);
+      if (levelDelta !== 0) return levelDelta;
+      return a.wcagRatio - b.wcagRatio;
+    })
+    .slice(0, 500);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     APCA_BCO,
     APCA_GCO,
     APCA_RCO,
     CVD_MATRICES,
+    buildCombinationsData,
+    buildIssuesData,
     calcAPCA,
     expandHex,
     formatAPCAScore,
@@ -488,6 +608,7 @@ if (typeof module !== "undefined" && module.exports) {
     isValidHex,
     normalizeStandard,
     rgbStringToHex,
+    shouldAnalyzePair,
     shouldIncludeIssueType,
     simulateCVD,
     suggestPassingColor,

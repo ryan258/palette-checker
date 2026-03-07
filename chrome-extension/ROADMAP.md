@@ -73,9 +73,9 @@ The main ChromaCheck app simulates color blindness on contrast cards. The extens
 
 - [x] **Full-Page SVG Filter Overlay** - Apply color blindness simulation filters to the entire page via an injected `<svg>` + CSS `filter` on `<html>`. Support all 8 simulation types (protanopia, deuteranopia, tritanopia, protanomaly, deuteranomaly, tritanomaly, achromatopsia, achromatomaly).
 - [x] **Quick Toggle Bar** - Inject a minimal floating toolbar at the top of the page for fast switching between simulation types. Keyboard shortcut support (e.g., `Alt+Shift+1` through `Alt+Shift+8`).
-- [ ] **Split-Screen Comparison** - Side-by-side view: left half of the page in normal vision, right half in simulated vision. Draggable divider.
+- [x] **Split-Screen Comparison** - Side-by-side view: left half of the page in normal vision, right half in simulated vision. Draggable divider.
 - [x] **Simulation-Aware Contrast Analysis** - Re-run the contrast matrix with simulated colors. "Under deuteranopia, 3 additional pairs drop below AA." Show which pairs are only problematic under specific simulations.
-- [ ] **Low Vision Simulation** - Beyond color blindness: simulate blur (low acuity), reduced contrast sensitivity, and visual field loss. These affect more users than color blindness.
+- [x] **Low Vision Simulation** - Beyond color blindness: simulate blur (low acuity), reduced contrast sensitivity, and visual field loss. These affect more users than color blindness.
 
 ---
 
@@ -100,12 +100,12 @@ Every other tool bolts APCA on as a secondary score next to WCAG 2.1. ChromaChec
 WCAG 1.4.11 (Non-text Contrast) requires 3:1 for UI components and graphical objects. No browser extension handles this well.
 
 - [x] **UI Component Contrast** - Detect buttons, inputs, checkboxes, and other form controls. Check their border/outline contrast against their background. Flag inputs that disappear into their container.
-- [ ] **Focus Indicator Audit** - Tab through the page programmatically. Capture the focus style of each interactive element. Check the focus indicator's contrast against both the element and its surrounding background.
+- [x] **Focus Indicator Audit** - Tab through the page programmatically. Capture the focus style of each interactive element. Check the focus indicator's contrast against both the element and its surrounding background.
 - [x] **Icon & SVG Contrast** - Detect inline SVGs and icon fonts. Measure their fill/stroke color against the background. Flag icons that rely solely on color to convey meaning.
 - [x] **Link Distinguishability** - WCAG 1.4.1 requires links within text to be distinguishable by more than color alone (or have 3:1 contrast with surrounding text). Detect links inside paragraphs, check if they have underlines or sufficient contrast against body text.
 - [x] **Placeholder Text Contrast** - Check `::placeholder` contrast against input backgrounds. This is one of the most commonly failed checks on the web.
 - [x] **Target Size Checking (WCAG 2.2)** - Measure interactive element dimensions against the new SC 2.5.8 requirement (24x24 CSS pixels minimum). Flag undersized buttons, links, and controls. This is WCAG 2.2's most automatable new success criterion and almost no tool checks it yet.
-- [ ] **Dark Mode & Theme-Aware Testing** - Detect `prefers-color-scheme` media queries and CSS custom property theming. Toggle between light/dark/high-contrast modes and re-run the full analysis for each. "Your palette passes AA in light mode but has 6 failures in dark mode." Test `forced-colors` mode for Windows High Contrast users.
+- [x] **Dark Mode & Theme-Aware Testing** - Detect `prefers-color-scheme` media queries and CSS custom property theming. Toggle between light/dark/high-contrast modes and re-run the full analysis for each. "Your palette passes AA in light mode but has 6 failures in dark mode." Test `forced-colors` mode for Windows High Contrast users.
 
 ---
 
@@ -118,7 +118,7 @@ Individual developer tools don't change organizations. Reports, dashboards, and 
 - [x] **Exportable Audit Report** - One-click export to HTML, PDF, or JSON. The report includes: page URL, timestamp, total issues by severity, each failing pair with screenshot snippet, CSS selector, current values, and suggested fix.
 - [x] **CSV/JSON for CI Integration** - Export raw data in machine-readable format for ingestion into CI pipelines, dashboards, or accessibility tracking systems.
 - [x] **GitHub Issue Generator** - For each failure (or batch of failures), generate a pre-formatted GitHub issue with reproduction details, WCAG success criterion reference, and suggested fix. Uses the GitHub API via OAuth.
-- [ ] **Comparison Across Pages** - Scan multiple pages on the same domain. Aggregate results: "Your site has 47 unique contrast failures across 12 pages. The 5 most impactful fixes would resolve 80% of them."
+- [x] **Comparison Across Pages** - Scan multiple pages on the same domain. Aggregate results: "Your site has 47 unique contrast failures across 12 pages. The 5 most impactful fixes would resolve 80% of them."
 - [x] **Design Token Extraction** - Detect CSS custom properties (`--color-primary`, `--bg-surface`, etc.) and Tailwind classes. Report issues in terms of the design system, not raw hex values: "Your `--text-muted` token fails AA on `--bg-surface`."
 
 ---
@@ -131,7 +131,7 @@ Power users live in DevTools. A dedicated panel there removes friction entirely.
 
 - [x] **DevTools Panel** - Register a "ChromaCheck" panel in Chrome DevTools via `devtools_page`. Show the full analysis UI alongside Elements, Console, and Network.
 - [x] **Elements Panel Integration** - In the Elements panel sidebar, show a "Contrast" pane for the currently inspected element. Auto-updates as you navigate the DOM tree.
-- [ ] **Computed Style Annotations** - Augment the Computed tab with contrast ratios next to `color` and `background-color` properties. Green/yellow/red indicators.
+- [x] **Computed Style Annotations** - Augment the Computed tab with contrast ratios next to `color` and `background-color` properties. Green/yellow/red indicators.
 - [x] **Console Warnings** - Optionally inject `console.warn()` messages for each contrast failure found during page load. Developers see failures in their normal workflow without opening any panel.
 
 ---
@@ -145,7 +145,7 @@ Production sites have 5,000+ DOM elements, complex stacking contexts, iframes, s
 - [x] **Shadow DOM Traversal** - Pierce shadow roots (open) to extract colors from web components. Custom elements are increasingly common, and most tools ignore them entirely.
 - [x] **Iframe Analysis** - With appropriate permissions, analyze content inside same-origin iframes. Common in CMS platforms, embedded widgets, and design tools.
 - [ ] **Incremental Scanning** - Don't re-walk the entire DOM on every analysis. Use `MutationObserver` to track changes and only re-analyze affected subtrees.
-- [ ] **Web Worker Offloading** - Move contrast calculations to a Web Worker so the main thread stays responsive during large-page scans.
+- [x] **Web Worker Offloading** - Move contrast calculations to a Web Worker so the main thread stays responsive during large-page scans.
 - [ ] **Viewport-Priority Scanning** - Analyze above-the-fold content first. Show initial results in <500ms, then progressively scan below-the-fold content.
 
 ---

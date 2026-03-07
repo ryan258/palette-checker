@@ -937,10 +937,37 @@
     { type: "achromatopsia", label: "Mono", shortcut: "7" },
     { type: "achromatomaly", label: "Low", shortcut: "8" },
   ];
+  const LOW_VISION_OPTIONS = {
+    none: { label: "Off", filter: "" },
+    "low-acuity": { label: "Low Acuity", filter: "blur(2px) saturate(0.92)" },
+    "contrast-loss": {
+      label: "Contrast Loss",
+      filter: "blur(0.6px) contrast(0.68) saturate(0.82) brightness(1.03)",
+    },
+    "field-loss": { label: "Field Loss", filter: "" },
+  };
+  const visionState = {
+    cvdMode: "none",
+    lowVisionMode: "none",
+    splitView: false,
+    divider: 0.5,
+  };
   let cvdToolbar = null;
   let cvdToolbarStyle = null;
-  let activeCvdMode = "none";
   let cvdShortcutBound = false;
+  let splitOverlay = null;
+  let splitPane = null;
+  let splitIframe = null;
+  let splitHandle = null;
+  let splitMask = null;
+  let fullPageMask = null;
+  let splitPointerId = null;
+
+  function nextFrame() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+  }
 
   function ensureCvdToolbar() {
     if (!document.body) return;
@@ -987,6 +1014,67 @@
           background: rgba(56, 189, 248, 0.18);
           color: #d6f3ff;
         }
+        #chromacheck-split-view {
+          position: fixed;
+          inset: 0;
+          z-index: 2147483644;
+          pointer-events: none;
+        }
+        #chromacheck-split-view iframe {
+          position: absolute;
+          top: 0;
+          height: 100vh;
+          border: 0;
+          pointer-events: none;
+          background: white;
+        }
+        #chromacheck-split-pane {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          right: 0;
+          overflow: hidden;
+          border-left: 1px solid rgba(56, 189, 248, 0.45);
+          box-shadow: -18px 0 28px rgba(2, 6, 23, 0.16);
+        }
+        #chromacheck-split-handle {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 18px;
+          margin-left: -9px;
+          pointer-events: auto;
+          cursor: col-resize;
+        }
+        #chromacheck-split-handle::before {
+          content: "";
+          position: absolute;
+          left: 8px;
+          top: 0;
+          bottom: 0;
+          width: 2px;
+          background: rgba(56, 189, 248, 0.88);
+        }
+        .chromacheck-split-chip {
+          position: absolute;
+          top: 16px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          background: rgba(2, 6, 23, 0.84);
+          color: #e2e8f0;
+          font: 11px/1.2 ui-monospace, SFMono-Regular, monospace;
+          border: 1px solid rgba(148, 163, 184, 0.24);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+        #chromacheck-chip-normal { left: 16px; }
+        #chromacheck-chip-simulated { right: 16px; }
+        .chromacheck-field-loss-mask {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background: radial-gradient(circle at center, transparent 16%, rgba(2, 6, 23, 0.88) 52%, rgba(2, 6, 23, 0.96) 78%);
+        }
       `;
       document.documentElement.appendChild(cvdToolbarStyle);
     }
@@ -1002,7 +1090,7 @@
           <button
             type="button"
             data-cvd-type="${option.type}"
-            data-active="${option.type === activeCvdMode}"
+            data-active="${option.type === visionState.cvdMode}"
             title="${option.type} (${option.shortcut})"
           >
             ${option.label}
@@ -1024,29 +1112,180 @@
       .querySelectorAll("button[data-cvd-type]")
       .forEach((button) => {
         button.dataset.active = String(
-          button.dataset.cvdType === activeCvdMode,
+          button.dataset.cvdType === visionState.cvdMode,
         );
       });
   }
 
-  function applyColorBlindnessMode(type, shouldBroadcast = false) {
-    activeCvdMode = type || "none";
-    ensureCvdToolbar();
-
-    if (activeCvdMode !== "none") {
-      document.documentElement.style.filter = `url(#chromacheck-${activeCvdMode})`;
-    } else {
-      document.documentElement.style.filter = "";
+  function getCombinedVisionFilter() {
+    const filters = [];
+    if (visionState.cvdMode && visionState.cvdMode !== "none") {
+      filters.push(`url(#chromacheck-${visionState.cvdMode})`);
     }
+    const lowVision =
+      LOW_VISION_OPTIONS[visionState.lowVisionMode] || LOW_VISION_OPTIONS.none;
+    if (lowVision.filter) {
+      filters.push(lowVision.filter);
+    }
+    return filters.join(" ").trim();
+  }
 
+  function getVisionLabel() {
+    const parts = [];
+    if (visionState.cvdMode && visionState.cvdMode !== "none") {
+      parts.push(visionState.cvdMode);
+    }
+    if (
+      visionState.lowVisionMode &&
+      visionState.lowVisionMode !== "none" &&
+      LOW_VISION_OPTIONS[visionState.lowVisionMode]
+    ) {
+      parts.push(LOW_VISION_OPTIONS[visionState.lowVisionMode].label);
+    }
+    return parts.join(" + ") || "Simulated";
+  }
+
+  function removeFullPageMask() {
+    if (fullPageMask) {
+      fullPageMask.remove();
+      fullPageMask = null;
+    }
+  }
+
+  function ensureFullPageMask() {
+    if (fullPageMask || !document.body) return;
+    fullPageMask = document.createElement("div");
+    fullPageMask.className = "chromacheck-field-loss-mask";
+    fullPageMask.id = "chromacheck-field-loss-mask";
+    document.body.appendChild(fullPageMask);
+  }
+
+  function syncSplitScroll() {
+    if (!splitIframe?.contentWindow) return;
+    try {
+      splitIframe.contentWindow.scrollTo(window.scrollX, window.scrollY);
+    } catch {}
+  }
+
+  function syncSplitLayout() {
+    if (!splitOverlay || !splitPane || !splitIframe || !splitHandle) return;
+    const divider = Math.max(0.15, Math.min(0.85, visionState.divider));
+    const viewportWidth = window.innerWidth;
+    const dividerX = Math.round(viewportWidth * divider);
+    splitPane.style.left = `${dividerX}px`;
+    splitPane.style.width = `${viewportWidth - dividerX}px`;
+    splitIframe.style.left = `${-dividerX}px`;
+    splitIframe.style.width = `${viewportWidth}px`;
+    splitHandle.style.left = `${dividerX}px`;
+  }
+
+  function destroySplitView() {
+    window.removeEventListener("resize", syncSplitLayout);
+    window.removeEventListener("scroll", syncSplitScroll, true);
+    splitOverlay?.remove();
+    splitOverlay = null;
+    splitPane = null;
+    splitIframe = null;
+    splitHandle = null;
+    splitMask = null;
+    splitPointerId = null;
+  }
+
+  function ensureSplitView() {
+    if (splitOverlay || !document.body) return;
+    splitOverlay = document.createElement("div");
+    splitOverlay.id = "chromacheck-split-view";
+    splitOverlay.innerHTML = `
+      <div id="chromacheck-chip-normal" class="chromacheck-split-chip">Normal</div>
+      <div id="chromacheck-chip-simulated" class="chromacheck-split-chip">${getVisionLabel()}</div>
+      <div id="chromacheck-split-pane">
+        <iframe title="ChromaCheck split view" aria-hidden="true"></iframe>
+        <div class="chromacheck-field-loss-mask" style="display:none"></div>
+      </div>
+      <div id="chromacheck-split-handle" aria-hidden="true"></div>
+    `;
+    document.body.appendChild(splitOverlay);
+    splitPane = splitOverlay.querySelector("#chromacheck-split-pane");
+    splitIframe = splitPane.querySelector("iframe");
+    splitHandle = splitOverlay.querySelector("#chromacheck-split-handle");
+    splitMask = splitPane.querySelector(".chromacheck-field-loss-mask");
+    splitIframe.src = window.location.href;
+    splitIframe.addEventListener("load", syncSplitScroll);
+    splitHandle.addEventListener("pointerdown", (event) => {
+      splitPointerId = event.pointerId;
+      splitHandle.setPointerCapture(splitPointerId);
+    });
+    splitHandle.addEventListener("pointermove", (event) => {
+      if (splitPointerId !== event.pointerId) return;
+      visionState.divider = event.clientX / window.innerWidth;
+      syncSplitLayout();
+    });
+    splitHandle.addEventListener("pointerup", () => {
+      splitPointerId = null;
+    });
+    splitHandle.addEventListener("pointercancel", () => {
+      splitPointerId = null;
+    });
+    window.addEventListener("resize", syncSplitLayout);
+    window.addEventListener("scroll", syncSplitScroll, true);
+    syncSplitLayout();
+  }
+
+  function applyVisionPresentation(shouldBroadcast = false) {
+    ensureCvdToolbar();
     syncCvdToolbar();
+
+    const hasSimulation =
+      (visionState.cvdMode && visionState.cvdMode !== "none") ||
+      (visionState.lowVisionMode && visionState.lowVisionMode !== "none");
+    const combinedFilter = getCombinedVisionFilter();
+
+    removeFullPageMask();
+
+    if (!hasSimulation) {
+      document.documentElement.style.filter = "";
+      destroySplitView();
+    } else if (visionState.splitView) {
+      document.documentElement.style.filter = "";
+      ensureSplitView();
+      splitIframe.style.filter = combinedFilter;
+      splitOverlay.querySelector("#chromacheck-chip-simulated").textContent =
+        getVisionLabel();
+      splitMask.style.display =
+        visionState.lowVisionMode === "field-loss" ? "block" : "none";
+      syncSplitLayout();
+      syncSplitScroll();
+    } else {
+      destroySplitView();
+      document.documentElement.style.filter = combinedFilter;
+      if (visionState.lowVisionMode === "field-loss") {
+        ensureFullPageMask();
+      }
+    }
 
     if (shouldBroadcast) {
       chrome.runtime.sendMessage({
         action: "cvdModeChanged",
-        type: activeCvdMode,
+        type: visionState.cvdMode,
       });
     }
+  }
+
+  function setVisionState(nextState = {}, shouldBroadcast = false) {
+    if (typeof nextState.cvdMode === "string") {
+      visionState.cvdMode = nextState.cvdMode;
+    }
+    if (typeof nextState.lowVisionMode === "string") {
+      visionState.lowVisionMode = nextState.lowVisionMode;
+    }
+    if (typeof nextState.splitView === "boolean") {
+      visionState.splitView = nextState.splitView;
+    }
+    applyVisionPresentation(shouldBroadcast);
+  }
+
+  function applyColorBlindnessMode(type, shouldBroadcast = false) {
+    setVisionState({ cvdMode: type || "none" }, shouldBroadcast);
   }
 
   function handleSimulationShortcut(event) {
@@ -1060,7 +1299,9 @@
       return;
     }
 
-    const nextOption = CVD_OPTIONS.find((option) => option.shortcut === event.key);
+    const nextOption = CVD_OPTIONS.find(
+      (option) => option.shortcut === event.key,
+    );
     if (!nextOption) return;
     event.preventDefault();
     applyColorBlindnessMode(nextOption.type, true);
@@ -1070,6 +1311,431 @@
     if (cvdShortcutBound) return;
     document.addEventListener("keydown", handleSimulationShortcut, true);
     cvdShortcutBound = true;
+  }
+
+  function parseShadowColor(boxShadow) {
+    if (!boxShadow || boxShadow === "none") return null;
+    const matches = boxShadow.match(/rgba?\([^)]+\)/g);
+    return matches?.[matches.length - 1] || null;
+  }
+
+  function captureFocusStyles(el) {
+    const style = window.getComputedStyle(el);
+    return {
+      outlineColor: style.outlineColor,
+      outlineWidth: parseFloat(style.outlineWidth) || 0,
+      outlineStyle: style.outlineStyle,
+      borderColor: style.borderTopColor,
+      borderWidth: parseFloat(style.borderTopWidth) || 0,
+      boxShadow: style.boxShadow,
+    };
+  }
+
+  function getFocusIndicator(before, after) {
+    if (
+      after.outlineWidth > 0 &&
+      after.outlineStyle !== "none" &&
+      after.outlineColor !== before.outlineColor &&
+      !isTransparent(after.outlineColor)
+    ) {
+      return { color: after.outlineColor, property: "outline-color" };
+    }
+
+    const afterShadowColor = parseShadowColor(after.boxShadow);
+    if (
+      after.boxShadow !== before.boxShadow &&
+      afterShadowColor &&
+      !isTransparent(afterShadowColor)
+    ) {
+      return { color: afterShadowColor, property: "box-shadow" };
+    }
+
+    if (
+      after.borderWidth > 0 &&
+      after.borderColor !== before.borderColor &&
+      !isTransparent(after.borderColor)
+    ) {
+      return { color: after.borderColor, property: "border-color" };
+    }
+
+    return null;
+  }
+
+  async function auditFocusIndicators() {
+    const selectors = [
+      "a[href]",
+      "button",
+      "input:not([type='hidden'])",
+      "select",
+      "textarea",
+      "summary",
+      "[tabindex]:not([tabindex='-1'])",
+      "[role='button']",
+      "[role='link']",
+      "[role='checkbox']",
+      "[role='radio']",
+      "[role='switch']",
+      "[role='tab']",
+    ];
+    const focusables = queryAllDeep(selectors.join(",")).filter((el) => {
+      if (!isContentVisible(el)) return false;
+      if (el.disabled) return false;
+      return true;
+    });
+    const seen = new Set();
+    const pairs = [];
+    const previousActive =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+
+    for (let index = 0; index < focusables.length; index += 1) {
+      const el = focusables[index];
+      const selector = getMinimalSelector(el);
+      if (seen.has(selector)) continue;
+      seen.add(selector);
+
+      const before = captureFocusStyles(el);
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        continue;
+      }
+      await nextFrame();
+
+      if (document.activeElement !== el) continue;
+      const after = captureFocusStyles(el);
+      const indicator = getFocusIndicator(before, after);
+      if (!indicator) continue;
+
+      const indicatorRgba = parseRGBA(indicator.color);
+      if (!indicatorRgba || indicatorRgba.a === 0) continue;
+
+      const outerPair = getRenderedPair(el.parentElement || el, indicatorRgba);
+      const innerPair = getRenderedPair(el, indicatorRgba);
+      if (!outerPair || !innerPair) continue;
+
+      const outerText = componentsToHex(outerPair.text);
+      const outerBg = componentsToHex(outerPair.background);
+      const innerText = componentsToHex(innerPair.text);
+      const innerBg = componentsToHex(innerPair.background);
+      const outerRatio = getContrastRatio(outerText, outerBg);
+      const innerRatio = getContrastRatio(innerText, innerBg);
+      const useOuter = outerRatio <= innerRatio;
+      const id =
+        el.getAttribute(TRACKED_ID_ATTR) || `focus-${String(index)}`;
+      trackElement(id, el);
+
+      pairs.push({
+        id,
+        textColor: useOuter ? outerText : innerText,
+        bgColor: useOuter ? outerBg : innerBg,
+        foregroundProperty: indicator.property,
+        selector,
+        textPreview: `Focus indicator ${indicator.property}`,
+        tagName: el.tagName.toLowerCase(),
+        fontSize: "24px",
+        fontWeight: "400",
+        type: "focus-indicator",
+      });
+    }
+
+    if (previousActive) {
+      try {
+        previousActive.focus({ preventScroll: true });
+      } catch {}
+    } else if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    return pairs;
+  }
+
+  function collectThemeSignals() {
+    const selectors = [];
+    const notes = [];
+    let prefersDark = false;
+    let forcedColors = false;
+
+    function readRules(rules) {
+      [...rules].forEach((rule) => {
+        if (rule.selectorText) {
+          selectors.push(rule.selectorText);
+        }
+        if (rule.media?.mediaText) {
+          const text = rule.media.mediaText;
+          if (text.includes("prefers-color-scheme")) prefersDark = true;
+          if (text.includes("forced-colors")) forcedColors = true;
+        }
+        if (rule.cssRules?.length) {
+          readRules(rule.cssRules);
+        }
+      });
+    }
+
+    try {
+      [...document.styleSheets].forEach((sheet) => {
+        try {
+          if (sheet.cssRules?.length) {
+            readRules(sheet.cssRules);
+          }
+        } catch {}
+      });
+    } catch {}
+
+    if (prefersDark) {
+      notes.push(
+        "Detected prefers-color-scheme rules. Theme audit toggles matching root hooks where available.",
+      );
+    }
+    if (forcedColors) {
+      notes.push(
+        "Detected forced-colors rules. Native Windows High Contrast emulation is reported but not overridden from the content script.",
+      );
+    }
+
+    return { selectors, notes };
+  }
+
+  function detectThemeCandidates() {
+    const { selectors, notes } = collectThemeSignals();
+    const candidates = [];
+    const seen = new Set();
+
+    function addCandidate(label, target, kind, key, value, note) {
+      const id = `${target}:${kind}:${key}:${value}`;
+      if (seen.has(id)) return;
+      seen.add(id);
+      candidates.push({ label, target, kind, key, value, note, mode: value });
+    }
+
+    const selectorText = selectors.join("\n");
+    const checks = [
+      {
+        test: /\.dark\b/i,
+        label: "Root .dark",
+        target: "documentElement",
+        kind: "class",
+        key: "dark",
+        value: "dark",
+        note: "class toggle",
+      },
+      {
+        test: /\.dark-mode\b/i,
+        label: "Root .dark-mode",
+        target: "documentElement",
+        kind: "class",
+        key: "dark-mode",
+        value: "dark",
+        note: "class toggle",
+      },
+      {
+        test: /body\.dark-mode\b/i,
+        label: "Body .dark-mode",
+        target: "body",
+        kind: "class",
+        key: "dark-mode",
+        value: "dark",
+        note: "class toggle",
+      },
+      {
+        test: /body\.dark\b/i,
+        label: "Body .dark",
+        target: "body",
+        kind: "class",
+        key: "dark",
+        value: "dark",
+        note: "class toggle",
+      },
+      {
+        test: /\[data-theme=['"]?dark/i,
+        label: "data-theme=dark",
+        target: "documentElement",
+        kind: "attr",
+        key: "data-theme",
+        value: "dark",
+        note: "attribute toggle",
+      },
+      {
+        test: /\[data-theme=['"]?light/i,
+        label: "data-theme=light",
+        target: "documentElement",
+        kind: "attr",
+        key: "data-theme",
+        value: "light",
+        note: "attribute toggle",
+      },
+      {
+        test: /\[data-color-mode=['"]?dark/i,
+        label: "data-color-mode=dark",
+        target: "documentElement",
+        kind: "attr",
+        key: "data-color-mode",
+        value: "dark",
+        note: "attribute toggle",
+      },
+      {
+        test: /\[data-color-mode=['"]?light/i,
+        label: "data-color-mode=light",
+        target: "documentElement",
+        kind: "attr",
+        key: "data-color-mode",
+        value: "light",
+        note: "attribute toggle",
+      },
+      {
+        test: /\[data-mode=['"]?dark/i,
+        label: "data-mode=dark",
+        target: "documentElement",
+        kind: "attr",
+        key: "data-mode",
+        value: "dark",
+        note: "attribute toggle",
+      },
+      {
+        test: /\[data-mode=['"]?light/i,
+        label: "data-mode=light",
+        target: "documentElement",
+        kind: "attr",
+        key: "data-mode",
+        value: "light",
+        note: "attribute toggle",
+      },
+      {
+        test: /\[data-theme=['"]?high-contrast/i,
+        label: "data-theme=high-contrast",
+        target: "documentElement",
+        kind: "attr",
+        key: "data-theme",
+        value: "high-contrast",
+        note: "high contrast attribute",
+      },
+      {
+        test: /\[data-contrast=['"]?(more|high)/i,
+        label: "data-contrast=more",
+        target: "documentElement",
+        kind: "attr",
+        key: "data-contrast",
+        value: "more",
+        note: "contrast preference attribute",
+      },
+      {
+        test: /\.high-contrast\b/i,
+        label: "Root .high-contrast",
+        target: "documentElement",
+        kind: "class",
+        key: "high-contrast",
+        value: "high-contrast",
+        note: "high contrast class",
+      },
+    ];
+
+    checks.forEach((entry) => {
+      if (entry.test.test(selectorText)) {
+        addCandidate(
+          entry.label,
+          entry.target,
+          entry.kind,
+          entry.key,
+          entry.value,
+          entry.note,
+        );
+      }
+    });
+
+    if (selectorText.includes("prefers-color-scheme")) {
+      addCandidate(
+        "color-scheme dark",
+        "documentElement",
+        "style",
+        "color-scheme",
+        "dark",
+        "color-scheme hint",
+      );
+      addCandidate(
+        "color-scheme light",
+        "documentElement",
+        "style",
+        "color-scheme",
+        "light",
+        "color-scheme hint",
+      );
+    }
+
+    return { candidates, notes };
+  }
+
+  function applyThemeCandidate(candidate) {
+    const target =
+      candidate.target === "body" ? document.body : document.documentElement;
+    if (!target) return () => {};
+
+    const previous = {
+      className: target.className,
+      attrValue: candidate.kind === "attr" ? target.getAttribute(candidate.key) : null,
+      styleValue:
+        candidate.kind === "style" ? target.style.getPropertyValue(candidate.key) : "",
+    };
+
+    if (candidate.kind === "class") {
+      target.classList.remove("dark", "light");
+      target.classList.add(candidate.key);
+    } else if (candidate.kind === "attr") {
+      target.setAttribute(candidate.key, candidate.value);
+    } else if (candidate.kind === "style") {
+      target.style.setProperty(candidate.key, candidate.value, "important");
+    }
+
+    return () => {
+      if (candidate.kind === "class") {
+        target.className = previous.className;
+      } else if (candidate.kind === "attr") {
+        if (previous.attrValue === null) {
+          target.removeAttribute(candidate.key);
+        } else {
+          target.setAttribute(candidate.key, previous.attrValue);
+        }
+      } else if (candidate.kind === "style") {
+        if (previous.styleValue) {
+          target.style.setProperty(candidate.key, previous.styleValue);
+        } else {
+          target.style.removeProperty(candidate.key);
+        }
+      }
+    };
+  }
+
+  async function auditThemes() {
+    const { candidates, notes } = detectThemeCandidates();
+    if (!candidates.length) {
+      return { variants: [], notes };
+    }
+
+    const variants = [
+      {
+        label: "Current theme",
+        mode: "current",
+        note: "live page",
+        palette: extractColors(),
+        pairs: extractElementPairs(),
+      },
+    ];
+
+    for (const candidate of candidates.slice(0, 6)) {
+      const restore = applyThemeCandidate(candidate);
+      await nextFrame();
+      variants.push({
+        label: candidate.label,
+        mode: candidate.mode,
+        note: candidate.note,
+        palette: extractColors(),
+        pairs: extractElementPairs(),
+      });
+      restore();
+      await nextFrame();
+    }
+
+    return { variants, notes };
   }
 
   // Listen for messages from popup
@@ -1112,14 +1778,38 @@
       sendResponse({ ok: true });
       return false;
     }
+    if (message.action === "setVisionState") {
+      setVisionState(
+        {
+          cvdMode: message.cvdMode,
+          lowVisionMode: message.lowVisionMode,
+          splitView: message.splitView,
+        },
+        false,
+      );
+      sendResponse({ ok: true });
+      return false;
+    }
     if (message.action === "simulateColorBlindness") {
-      applyColorBlindnessMode(message.type, false);
+      setVisionState({ cvdMode: message.type || "none" }, false);
       sendResponse({ ok: true });
       return false;
     }
     if (message.action === "extractElementPairs") {
       sendResponse({ pairs: extractElementPairs() });
       return false;
+    }
+    if (message.action === "auditFocusIndicators") {
+      auditFocusIndicators()
+        .then((pairs) => sendResponse({ pairs }))
+        .catch(() => sendResponse({ pairs: [] }));
+      return true;
+    }
+    if (message.action === "auditThemes") {
+      auditThemes()
+        .then((result) => sendResponse(result))
+        .catch(() => sendResponse({ variants: [], notes: [] }));
+      return true;
     }
     if (message.action === "previewFix") {
       sendResponse({

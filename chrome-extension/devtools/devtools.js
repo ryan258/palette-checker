@@ -24,28 +24,88 @@ chrome.devtools.panels.elements.createSidebarPane("Contrast", (sidebar) => {
         (function() {
           const el = $0;
           if (!el || el.nodeType !== Node.ELEMENT_NODE) return null;
-          
-          const style = window.getComputedStyle(el);
-          const fg = style.color;
-          
-          // Find effective background by walking up the tree
-          let bg = 'rgb(255, 255, 255)';
-          let current = el;
-          while (current) {
-            const currentBg = window.getComputedStyle(current).backgroundColor;
-            if (currentBg !== 'rgba(0, 0, 0, 0)' && currentBg !== 'transparent') {
-              bg = currentBg;
-              break;
+
+          function getMinimalSelector(node) {
+            if (node.id) return "#" + CSS.escape(node.id);
+
+            const parts = [];
+            let current = node;
+            while (current && current !== document.body && current !== document.documentElement) {
+              let piece = current.tagName.toLowerCase();
+
+              if (current.className && typeof current.className === "string") {
+                const classes = current.className
+                  .trim()
+                  .split(/\\s+/)
+                  .filter(Boolean)
+                  .slice(0, 2);
+                if (classes.length) {
+                  piece += "." + classes.map((name) => CSS.escape(name)).join(".");
+                }
+              }
+
+              const parent = current.parentElement;
+              if (parent) {
+                const siblings = Array.from(parent.children).filter(
+                  (child) => child.tagName === current.tagName,
+                );
+                if (siblings.length > 1) {
+                  piece += ":nth-of-type(" + (siblings.indexOf(current) + 1) + ")";
+                }
+              }
+
+              parts.unshift(piece);
+              current = parent;
+              if (parts.length >= 4) break;
             }
-            current = current.parentElement;
+
+            return parts.join(" > ") || node.tagName.toLowerCase();
           }
 
+          function getEffectiveBackground(node) {
+            let current = node;
+            while (current) {
+              const currentStyle = window.getComputedStyle(current);
+              const currentBg = currentStyle.backgroundColor;
+              if (currentBg !== "rgba(0, 0, 0, 0)" && currentBg !== "transparent") {
+                return {
+                  value: currentBg,
+                  source: current === node ? "self" : "ancestor",
+                };
+              }
+              current = current.parentElement;
+            }
+
+            return {
+              value: "rgb(255, 255, 255)",
+              source: "fallback",
+            };
+          }
+
+          const style = window.getComputedStyle(el);
+          const effectiveBackground = getEffectiveBackground(el);
+
           return {
-            fg: fg,
-            bg: bg,
+            fg: style.color,
+            bg: effectiveBackground.value,
             fontSize: style.fontSize,
             fontWeight: style.fontWeight,
-            tagName: el.tagName.toLowerCase()
+            tagName: el.tagName.toLowerCase(),
+            selector: getMinimalSelector(el),
+            computed: {
+              color: style.color,
+              backgroundColor: style.backgroundColor,
+              effectiveBackgroundColor: effectiveBackground.value,
+              backgroundSource: effectiveBackground.source,
+              outlineColor: style.outlineColor,
+              outlineWidth: style.outlineWidth,
+              outlineStyle: style.outlineStyle,
+              borderColor: style.borderTopColor,
+              borderWidth: style.borderTopWidth,
+              borderStyle: style.borderTopStyle,
+              boxShadow: style.boxShadow,
+              colorScheme: style.colorScheme,
+            }
           };
         })()
       `;

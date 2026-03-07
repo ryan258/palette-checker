@@ -18,6 +18,8 @@
       }
       .element-info {
         margin-bottom: 12px;
+        display: grid;
+        gap: 6px;
       }
       .sidebar-issue-card {
         background: var(--bg-card);
@@ -25,6 +27,106 @@
         border-radius: 8px;
         padding: 12px;
         margin-bottom: 12px;
+      }
+      .element-tag {
+        width: fit-content;
+      }
+      .element-selector {
+        display: block;
+        font-size: 11px;
+        color: var(--text-secondary);
+        word-break: break-word;
+      }
+      .element-meta {
+        font-size: 11px;
+        color: var(--text-secondary);
+      }
+      .sidebar-pair {
+        display: grid;
+        gap: 6px;
+      }
+      .pair-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      .sidebar-score-grid {
+        display: grid;
+        gap: 8px;
+      }
+      .sidebar-score-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px;
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 6px;
+      }
+      .sidebar-score-value {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .section-label {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+      }
+      .computed-section {
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+      }
+      .computed-list {
+        display: grid;
+        gap: 8px;
+      }
+      .computed-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        padding: 8px 0;
+      }
+      .computed-main {
+        min-width: 0;
+      }
+      .computed-meta {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 3px;
+      }
+      .computed-prop {
+        font-family: monospace;
+        font-size: 12px;
+        color: var(--text-primary);
+      }
+      .computed-value {
+        font-family: monospace;
+        font-size: 11px;
+        color: var(--text-secondary);
+      }
+      .computed-note {
+        font-size: 11px;
+        color: var(--text-secondary);
+      }
+      .computed-result {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+      .computed-swatch {
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        flex-shrink: 0;
       }
     </style>
   </head>

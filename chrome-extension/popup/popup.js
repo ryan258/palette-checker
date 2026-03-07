@@ -9,6 +9,7 @@ const ANALYSIS_BY_URL_KEY = "chromacheckAnalysisByUrl";
 const PINNED_ITEMS_KEY = "chromacheckPinnedItems";
 const MAX_SAVED_ANALYSES = 15;
 const MAX_HISTORY_PER_PAGE = 10;
+const DOMAIN_COMPARISON_LIMIT = 8;
 const PICKER_PENDING_MESSAGE =
   "Inspect mode is live. Hover the page, then click any element and ChromaCheck will update here instantly.";
 const UNSUPPORTED_PAGE_MESSAGE =
@@ -73,7 +74,10 @@ const state = {
   colors: [],
   combinations: [],
   elementPairs: [],
+  focusPairs: [],
   issues: [],
+  themeAudit: null,
+  domainComparison: null,
   observedTabId: null,
   activeFilters: FILTER_KEYS.reduce((acc, key) => {
     acc[key] = true;
@@ -92,6 +96,8 @@ const state = {
     autoSync: false,
     consoleWarnings: false,
     cvdMode: "none",
+    lowVisionMode: "none",
+    splitView: false,
     standard: "WCAG21",
     githubRepoUrl: "",
   },
@@ -99,11 +105,15 @@ const state = {
   scanDiff: null,
   selectedIssueKeys: [],
   isExtracting: false,
+  isFocusAuditing: false,
+  isThemeAuditing: false,
 };
 
 const SETTINGS_KEY = "chromacheckSettings";
 
 const extractBtn = document.getElementById("extract-btn");
+const focusAuditBtn = document.getElementById("focus-audit-btn");
+const themeAuditBtn = document.getElementById("theme-audit-btn");
 const pickerBtn = document.getElementById("picker-btn");
 const pageTitle = document.getElementById("page-title");
 const pageUrl = document.getElementById("page-url");
@@ -137,6 +147,14 @@ const batchClearBtn = document.getElementById("batch-clear-btn");
 const diffSection = document.getElementById("diff-section");
 const diffSummary = document.getElementById("diff-summary");
 const diffMeta = document.getElementById("diff-meta");
+const themeSection = document.getElementById("theme-section");
+const themeSummary = document.getElementById("theme-summary");
+const themeList = document.getElementById("theme-list");
+const themeCount = document.getElementById("theme-count");
+const domainSection = document.getElementById("domain-section");
+const domainSummary = document.getElementById("domain-summary");
+const domainList = document.getElementById("domain-list");
+const domainCount = document.getElementById("domain-count");
 const emptyState = document.getElementById("empty-state");
 
 // Settings Elements
@@ -149,6 +167,8 @@ const consoleWarningsToggle = document.getElementById(
 );
 const standardSelect = document.getElementById("standard-select");
 const cvdSelect = document.getElementById("color-blindness-select");
+const lowVisionSelect = document.getElementById("low-vision-select");
+const splitViewToggle = document.getElementById("split-view-toggle");
 const githubRepoUrlInput = document.getElementById("github-repo-url");
 const exportBtn = document.getElementById("export-btn");
 const historySection = document.getElementById("history-section");
@@ -159,6 +179,9 @@ const pinnedList = document.getElementById("pinned-list");
 const pinnedCount = document.getElementById("pinned-count");
 
 let syncToken = 0;
+let analysisWorker = null;
+let analysisRequestId = 0;
+const pendingAnalysisRequests = new Map();
 
 function storageGet(keys) {
   return new Promise((resolve) => {
@@ -261,7 +284,11 @@ function getScoreTone(level) {
 function getIssueStableKey(issue) {
   return (
     issue?.key ||
-    [issue?.type || "text", issue?.selector || "", issue?.foregroundProperty || "color"].join("|")
+    [
+      issue?.type || "text",
+      issue?.selector || "",
+      issue?.foregroundProperty || "color",
+    ].join("|")
   );
 }
 
@@ -300,6 +327,8 @@ function getIssueExplanation(issue) {
       return "Small targets force extra precision, which slows down people using touch, switch access, or screen magnification.";
     case "link-contrast":
       return "Links that differ from surrounding text by color alone are easy to miss for people with color-vision differences or low contrast sensitivity.";
+    case "focus-indicator":
+      return "Weak focus rings make keyboard navigation unreliable because people can lose track of which control is active.";
     case "placeholder":
       return "Low-contrast placeholder text disappears quickly under glare, fatigue, and low vision, which makes forms harder to understand.";
     case "non-text":
@@ -314,7 +343,11 @@ function buildCssFixRule(option) {
 }
 
 function getIssueFixOptions(issue) {
-  if (!issue || issue.type === "target-size" || issue.type === "link-contrast") {
+  if (
+    !issue ||
+    issue.type === "target-size" ||
+    issue.type === "link-contrast"
+  ) {
     return null;
   }
 
@@ -397,7 +430,10 @@ function computeScanDiff(previousScan, currentIssues) {
     previousScan.issues.map((issue) => [issue.key, issue]),
   );
   const currentByKey = new Map(
-    currentIssues.map((issue) => [issue.key || getIssueStableKey(issue), issue]),
+    currentIssues.map((issue) => [
+      issue.key || getIssueStableKey(issue),
+      issue,
+    ]),
   );
 
   let newIssues = 0;
@@ -482,52 +518,110 @@ function getPinnedStatusAlert(item) {
 }
 
 function syncSelectedIssueKeys() {
-  const availableKeys = new Set(state.issues.map((issue) => getIssueStableKey(issue)));
+  const availableKeys = new Set(
+    state.issues.map((issue) => getIssueStableKey(issue)),
+  );
   state.selectedIssueKeys = state.selectedIssueKeys.filter((key) =>
     availableKeys.has(key),
   );
 }
 
-function buildCombinationsData(colors) {
-  const uniqueColors = [...new Set(colors)];
-  const combinations = [];
-  const cvdMode = state.settings.cvdMode || "none";
+function getCurrentAnalysisPairs() {
+  return [...state.elementPairs, ...state.focusPairs];
+}
 
-  for (let i = 0; i < uniqueColors.length; i += 1) {
-    for (let j = 0; j < uniqueColors.length; j += 1) {
-      if (i === j) continue;
+function runAnalysisSync({ colors, pairs, settings }) {
+  return {
+    combinations: buildCombinationsData(colors, settings),
+    issues: buildIssuesData(pairs, settings),
+  };
+}
 
-      const textHex = uniqueColors[i];
-      const bgHex = uniqueColors[j];
-      const simText = simulateCVD(textHex, cvdMode);
-      const simBg = simulateCVD(bgHex, cvdMode);
+function getAnalysisWorker() {
+  if (!window.Worker) return null;
+  if (analysisWorker) return analysisWorker;
 
-      const wcagRatio = getContrastRatio(simText, simBg);
-      const wcagLevel = getContextualComplianceLevel(wcagRatio, 16, 400);
-      const apcaScore = calcAPCA(simText, simBg);
-      const apcaLevel = getAPCAComplianceLevel(apcaScore, 16, 400);
-
-      combinations.push({
-        textHex,
-        bgHex,
-        wcagRatio,
-        wcagLevel,
-        apcaScore,
-        apcaLevel,
-      });
+  analysisWorker = new Worker("analysis-worker.js");
+  analysisWorker.addEventListener("message", (event) => {
+    const { id, result, error } = event.data || {};
+    if (!pendingAnalysisRequests.has(id)) return;
+    const pending = pendingAnalysisRequests.get(id);
+    pendingAnalysisRequests.delete(id);
+    if (error) {
+      pending.reject(new Error(error));
+      return;
     }
+    pending.resolve(result);
+  });
+  analysisWorker.addEventListener("error", (event) => {
+    pendingAnalysisRequests.forEach(({ reject }) => {
+      reject(event.error || new Error("Analysis worker failed"));
+    });
+    pendingAnalysisRequests.clear();
+    analysisWorker = null;
+  });
+  return analysisWorker;
+}
+
+async function runAnalysisWorker(payload) {
+  const worker = getAnalysisWorker();
+  if (!worker) return runAnalysisSync(payload);
+
+  const id = ++analysisRequestId;
+  return new Promise((resolve, reject) => {
+    pendingAnalysisRequests.set(id, { resolve, reject });
+    worker.postMessage({
+      id,
+      colors: payload.colors,
+      pairs: payload.pairs,
+      settings: payload.settings,
+    });
+  }).catch(() => runAnalysisSync(payload));
+}
+
+async function recomputeAnalysis({
+  colors = state.colors,
+  pairs = getCurrentAnalysisPairs(),
+  preserveIssues = false,
+} = {}) {
+  if (!colors.length) {
+    state.combinations = [];
+    if (!pairs.length) {
+      if (!preserveIssues) {
+        state.issues = [];
+      }
+      return;
+    }
+    state.issues = buildIssuesData(pairs, state.settings);
+    return;
   }
 
-  return combinations.sort((a, b) => {
-    if (state.settings.standard === "APCA") {
-      const levelDelta = getLevelRank(a.apcaLevel) - getLevelRank(b.apcaLevel);
-      if (levelDelta !== 0) return levelDelta;
-      return Math.abs(a.apcaScore) - Math.abs(b.apcaScore);
-    }
-    const levelDelta = getLevelRank(a.wcagLevel) - getLevelRank(b.wcagLevel);
-    if (levelDelta !== 0) return levelDelta;
-    return a.wcagRatio - b.wcagRatio;
+  if (!pairs.length && preserveIssues) {
+    state.combinations = buildCombinationsData(colors, state.settings);
+    return;
+  }
+
+  const result = await runAnalysisWorker({
+    colors,
+    pairs,
+    settings: state.settings,
   });
+  state.combinations = result.combinations;
+  state.issues = preserveIssues && !pairs.length ? state.issues : result.issues;
+}
+
+async function applyVisionSettings() {
+  await sendToContent({
+    action: "setVisionState",
+    cvdMode: state.settings.cvdMode || "none",
+    lowVisionMode: state.settings.lowVisionMode || "none",
+    splitView: Boolean(state.settings.splitView),
+  });
+}
+
+function setAuditLoading(button, isLoading, label, loadingLabel) {
+  button.disabled = isLoading || !state.pageContext.supported;
+  button.textContent = isLoading ? loadingLabel : label;
 }
 
 function setAnalysis(palette, extractedAt) {
@@ -535,7 +629,7 @@ function setAnalysis(palette, extractedAt) {
     ? palette.filter((entry) => entry && typeof entry.hex === "string")
     : [];
   state.colors = state.palette.map((entry) => entry.hex);
-  state.combinations = buildCombinationsData(state.colors);
+  state.combinations = buildCombinationsData(state.colors, state.settings);
   state.analysisMeta.extractedAt = extractedAt || null;
 }
 
@@ -605,7 +699,9 @@ function render() {
   renderMetrics();
   renderIssues();
   renderScanDiff();
+  renderThemeAudit();
   renderPalette();
+  renderDomainComparison();
   renderCombinations();
   renderPinned();
   clearStatusBanner();
@@ -617,7 +713,10 @@ function clearAnalysis() {
   state.colors = [];
   state.combinations = [];
   state.elementPairs = [];
+  state.focusPairs = [];
   state.issues = [];
+  state.themeAudit = null;
+  state.domainComparison = null;
   state.scanDiff = null;
   state.selectedIssueKeys = [];
   state.analysisMeta.extractedAt = null;
@@ -672,7 +771,9 @@ async function saveAnalysisForCurrentPage(scanOrPalette, extractedAt) {
           ? scanOrPalette.palette
           : [],
         extractedAt: scanOrPalette?.extractedAt || extractedAt || Date.now(),
-        issues: Array.isArray(scanOrPalette?.issues) ? scanOrPalette.issues : [],
+        issues: Array.isArray(scanOrPalette?.issues)
+          ? scanOrPalette.issues
+          : [],
       };
 
   // Add new scan at the top
@@ -719,6 +820,7 @@ async function refreshHistory() {
 
   if (!activeUrl) {
     state.scanDiff = null;
+    state.domainComparison = null;
     historySection.style.display = "none";
     historyCount.textContent = "";
     return;
@@ -736,6 +838,11 @@ async function refreshHistory() {
   const history = Array.isArray(rawHistory)
     ? rawHistory.map(normalizeSavedScan)
     : [normalizeSavedScan(rawHistory)];
+  state.domainComparison = computeDomainComparison(
+    analyses,
+    state.pageContext.domain,
+    activeUrl,
+  );
   const activeIndex = history.findIndex(
     (scan) => scan.extractedAt === activeExtractedAt,
   );
@@ -776,6 +883,62 @@ async function refreshHistory() {
   });
 }
 
+function computeDomainComparison(analyses, domain, activeUrl) {
+  if (!domain || domain === "Current page") return null;
+
+  const pages = Object.entries(analyses)
+    .map(([url, history]) => {
+      const normalizedHistory = Array.isArray(history)
+        ? history.map(normalizeSavedScan)
+        : [normalizeSavedScan(history)];
+      const latest = normalizedHistory[0];
+      if (!latest?.extractedAt) return null;
+      if (deriveDomain(url) !== domain) return null;
+
+      return {
+        url,
+        title: latest.title || url,
+        extractedAt: latest.extractedAt,
+        issueCount: latest.issues.length,
+        issues: latest.issues,
+        isActive: url === activeUrl,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.extractedAt || 0) - (a.extractedAt || 0))
+    .slice(0, DOMAIN_COMPARISON_LIMIT);
+
+  if (!pages.length) return null;
+
+  const recurringIssues = new Map();
+  pages.forEach((page) => {
+    const seenKeys = new Set();
+    page.issues.forEach((issue) => {
+      const key = issue.key || getIssueStableKey(issue);
+      if (seenKeys.has(key)) return;
+      seenKeys.add(key);
+      const existing = recurringIssues.get(key) || {
+        label: issue.selector || key,
+        count: 0,
+      };
+      existing.count += 1;
+      recurringIssues.set(key, existing);
+    });
+  });
+
+  const topIssues = [...recurringIssues.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+
+  return {
+    pageCount: pages.length,
+    totalIssues: pages.reduce((sum, page) => sum + page.issueCount, 0),
+    uniqueIssueCount: recurringIssues.size,
+    topIssues,
+    pages,
+  };
+}
+
 async function loadPinnedItems() {
   const result = await chrome.storage.local.get([PINNED_ITEMS_KEY]);
   state.pinnedItems = (result[PINNED_ITEMS_KEY] || []).map((item) => {
@@ -803,7 +966,9 @@ function togglePin(item) {
   const id =
     item.id ||
     item.key ||
-    (item.type === "combo" ? `combo:${item.fg}:${item.bg}` : getIssueStableKey(item));
+    (item.type === "combo"
+      ? `combo:${item.fg}:${item.bg}`
+      : getIssueStableKey(item));
   const index = state.pinnedItems.findIndex((p) => p.id === id);
 
   if (index > -1) {
@@ -811,10 +976,7 @@ function togglePin(item) {
   } else {
     state.pinnedItems.push({
       ...item,
-      key:
-        item.type === "combo"
-          ? id
-          : item.key || getIssueStableKey(item),
+      key: item.type === "combo" ? id : item.key || getIssueStableKey(item),
       pinnedAt: Date.now(),
       id,
     });
@@ -892,6 +1054,73 @@ function renderScanDiff() {
   diffSummary.textContent = `${state.scanDiff.newIssues} new issues, ${state.scanDiff.resolvedIssues} resolved, ${state.scanDiff.changedIssues} changed status since the previous scan.`;
 }
 
+function renderThemeAudit() {
+  themeList.innerHTML = "";
+
+  if (!state.themeAudit?.variants?.length) {
+    themeSection.style.display = "none";
+    themeCount.textContent = "";
+    themeSummary.textContent = "";
+    return;
+  }
+
+  themeSection.style.display = "block";
+  themeCount.textContent = `${state.themeAudit.variants.length} variants`;
+  themeSummary.textContent = state.themeAudit.notes?.length
+    ? state.themeAudit.notes.join(" ")
+    : "Theme variants are scanned by temporarily toggling detected root classes, attributes, and color-scheme hints.";
+
+  state.themeAudit.variants.forEach((variant) => {
+    const deltaLabel =
+      typeof variant.issueDelta === "number"
+        ? variant.issueDelta === 0
+          ? "Matches current"
+          : `${variant.issueDelta > 0 ? "+" : ""}${variant.issueDelta} issues, ${variant.failDelta > 0 ? "+" : ""}${variant.failDelta} fails vs current`
+        : variant.note || variant.mode;
+    const row = document.createElement("div");
+    row.className = "theme-row";
+    row.innerHTML = `
+      <div>
+        <strong>${escapeHtml(variant.label)}</strong>
+        <p>${variant.issueCount} issues · ${variant.failCount} fails · ${variant.paletteCount} colors</p>
+      </div>
+      <span class="theme-note">${escapeHtml(deltaLabel)}</span>
+    `;
+    themeList.appendChild(row);
+  });
+}
+
+function renderDomainComparison() {
+  domainList.innerHTML = "";
+
+  if (!state.domainComparison || state.domainComparison.pageCount < 2) {
+    domainSection.style.display = "none";
+    domainCount.textContent = "";
+    domainSummary.textContent = "";
+    return;
+  }
+
+  domainSection.style.display = "block";
+  domainCount.textContent = `${state.domainComparison.pageCount} pages`;
+  const topIssue = state.domainComparison.topIssues[0];
+  domainSummary.textContent = topIssue
+    ? `${state.domainComparison.uniqueIssueCount} unique issues across ${state.domainComparison.pageCount} scanned pages. Most common: ${topIssue.label} (${topIssue.count} pages).`
+    : `${state.domainComparison.uniqueIssueCount} unique issues across ${state.domainComparison.pageCount} scanned pages.`;
+
+  state.domainComparison.pages.forEach((page) => {
+    const row = document.createElement("div");
+    row.className = "theme-row";
+    row.innerHTML = `
+      <div>
+        <strong>${escapeHtml(page.title)}</strong>
+        <p>${formatScanTimestamp(page.extractedAt)} · ${page.issueCount} issues</p>
+      </div>
+      <span class="theme-note">${page.isActive ? "Current" : deriveDomain(page.url)}</span>
+    `;
+    domainList.appendChild(row);
+  });
+}
+
 function renderStatusBanner(message, tone = "info") {
   statusBanner.textContent = message;
   statusBanner.className = `status-banner ${tone}`;
@@ -928,6 +1157,18 @@ function renderPageContext() {
     : "Read-only tab";
 
   extractBtn.disabled = state.isExtracting || !state.pageContext.supported;
+  setAuditLoading(
+    focusAuditBtn,
+    state.isFocusAuditing,
+    "Focus Audit",
+    "Auditing...",
+  );
+  setAuditLoading(
+    themeAuditBtn,
+    state.isThemeAuditing,
+    "Theme Audit",
+    "Scanning...",
+  );
   if (!pickerBtn.classList.contains("active")) {
     pickerBtn.disabled = !state.pageContext.supported;
   }
@@ -1163,75 +1404,8 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function buildIssuesData(pairs) {
-  const cvdMode = state.settings.cvdMode || "none";
-
-  return pairs
-    .filter((pair) => shouldIncludeIssueType(pair.type, state.settings.standard))
-    .map((pair) => {
-      const simText = simulateCVD(pair.textColor, cvdMode);
-      const simBg = simulateCVD(pair.bgColor, cvdMode);
-
-      let wcagRatio = getContrastRatio(simText, simBg);
-      let wcagLevel = getContextualComplianceLevel(
-        wcagRatio,
-        pair.fontSize,
-        pair.fontWeight,
-      );
-      let apcaScore = calcAPCA(simText, simBg);
-      let apcaLevel = getAPCAComplianceLevel(
-        apcaScore,
-        pair.fontSize,
-        pair.fontWeight,
-      );
-
-      if (pair.type === "target-size") {
-        wcagRatio = 0;
-        wcagLevel = "Fail";
-        apcaScore = 0;
-        apcaLevel = "Fail";
-      } else if (pair.type === "link-contrast") {
-        // WCAG 1.4.1 requires exact 3.0:1 threshold
-        wcagLevel = wcagRatio >= 3.0 ? "AA Large" : "Fail";
-        apcaLevel = Math.abs(apcaScore) >= 45 ? "AA Large" : "Fail";
-      }
-
-      return {
-        ...pair,
-        key: getIssueStableKey(pair),
-        wcagRatio,
-        wcagLevel,
-        apcaScore,
-        apcaLevel,
-      };
-    })
-    .sort((a, b) => {
-      if (state.settings.standard === "APCA") {
-        const levelDelta =
-          getLevelRank(a.apcaLevel) - getLevelRank(b.apcaLevel);
-        if (levelDelta !== 0) return levelDelta;
-        return Math.abs(a.apcaScore) - Math.abs(b.apcaScore);
-      }
-      const levelDelta = getLevelRank(a.wcagLevel) - getLevelRank(b.wcagLevel);
-      if (levelDelta !== 0) return levelDelta;
-      return a.wcagRatio - b.wcagRatio;
-    })
-    .slice(0, 500);
-}
-
 function getIssueSummary() {
-  let fails = 0;
-  let warnings = 0;
-  state.issues.forEach((i) => {
-    if (state.settings.standard === "APCA") {
-      if (i.apcaLevel === "Fail") fails += 1;
-      else if (i.apcaLevel === "AA Large") warnings += 1; // "Silver" large text
-    } else {
-      if (i.wcagLevel === "Fail") fails += 1;
-      else if (i.wcagLevel === "AA Large") warnings += 1;
-    }
-  });
-  return { total: state.issues.length, fails, warnings };
+  return summarizeIssueList(state.issues, state.settings);
 }
 
 function renderIssues() {
@@ -1288,11 +1462,13 @@ function renderIssues() {
           ${
             issue.type === "target-size"
               ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>'
-              : issue.type === "link-contrast"
-                ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>'
-                : issue.type === "non-text"
-                  ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
-                  : "Aa"
+              : issue.type === "focus-indicator"
+                ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>'
+                : issue.type === "link-contrast"
+                  ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>'
+                  : issue.type === "non-text"
+                    ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
+                    : "Aa"
           }
         </div>
         <div class="issue-info">
@@ -1366,7 +1542,10 @@ function renderIssues() {
 
       const githubFixLines = [fixOptions.text, fixOptions.background]
         .filter(Boolean)
-        .map((option) => `- \`${option.selector} { ${option.property}: ${option.suggestion}; }\``)
+        .map(
+          (option) =>
+            `- \`${option.selector} { ${option.property}: ${option.suggestion}; }\``,
+        )
         .join("\n");
       const fixHtml = `
         <div class="issue-fix-suggestion">
@@ -1434,10 +1613,20 @@ function updateEmptyStateVisibility() {
   const hasResults = resultsSection.style.display !== "none";
   const hasIssues = issuesSection.style.display !== "none";
   const hasDiff = diffSection.style.display !== "none";
+  const hasThemeAudit = themeSection.style.display !== "none";
+  const hasDomain = domainSection.style.display !== "none";
 
   renderEmptyState();
   emptyState.style.display =
-    hasPalette || hasPicked || hasResults || hasIssues || hasDiff ? "none" : "";
+    hasPalette ||
+    hasPicked ||
+    hasResults ||
+    hasIssues ||
+    hasDiff ||
+    hasThemeAudit ||
+    hasDomain
+      ? "none"
+      : "";
 }
 
 function filterCombinations() {
@@ -1545,12 +1734,16 @@ async function syncWorkspaceFromActiveTab() {
 
   if (savedAnalysis?.palette?.length) {
     setAnalysis(savedAnalysis.palette, savedAnalysis.extractedAt);
-    state.issues = Array.isArray(savedAnalysis.issues) ? savedAnalysis.issues : [];
+    state.issues = Array.isArray(savedAnalysis.issues)
+      ? savedAnalysis.issues
+      : [];
   } else {
     clearAnalysis();
   }
 
   state.elementPairs = [];
+  state.focusPairs = [];
+  state.themeAudit = null;
   if (!savedAnalysis?.palette?.length) {
     state.issues = [];
   }
@@ -1575,10 +1768,7 @@ async function syncWorkspaceFromActiveTab() {
   if (token !== syncToken) return;
 
   if (nextPageContext.supported && activeTab?.id) {
-    void sendToTab(activeTab.id, {
-      action: "simulateColorBlindness",
-      type: state.settings.cvdMode || "none",
-    });
+    void applyVisionSettings();
   }
 
   await refreshHistory();
@@ -1594,13 +1784,23 @@ async function handleExtract() {
   }
 
   setExtractLoading(true);
+  state.themeAudit = null;
+  if (state.settings.standard === "WCAG22") {
+    state.isFocusAuditing = true;
+    renderPageContext();
+  }
 
-  const [colorResponse, pairsResponse] = await Promise.all([
+  const [colorResponse, pairsResponse, focusResponse] = await Promise.all([
     sendToContent({ action: "extractColors" }),
     sendToContent({ action: "extractElementPairs" }),
+    state.settings.standard === "WCAG22"
+      ? sendToContent({ action: "auditFocusIndicators" })
+      : Promise.resolve({ pairs: [] }),
   ]);
 
   setExtractLoading(false);
+  state.isFocusAuditing = false;
+  renderPageContext();
 
   if (!colorResponse?.colors?.length && !pairsResponse?.pairs?.length) {
     renderStatusBanner(EXTRACT_ERROR_MESSAGE, "error");
@@ -1612,13 +1812,18 @@ async function handleExtract() {
     ? colorResponse.colors
     : state.palette;
   state.elementPairs = pairsResponse?.pairs || [];
-  state.issues = buildIssuesData(state.elementPairs);
+  state.focusPairs = focusResponse?.pairs || [];
+
+  if (nextPalette?.length && colorResponse?.colors?.length) {
+    setAnalysis(nextPalette, extractedAt);
+  }
+  await recomputeAnalysis({
+    colors: nextPalette,
+    pairs: getCurrentAnalysisPairs(),
+  });
   const nextIssueSummary = summarizeIssuesForStorage(state.issues);
 
   if (nextPalette?.length) {
-    if (colorResponse?.colors?.length) {
-      setAnalysis(nextPalette, extractedAt);
-    }
     state.scanDiff = computeScanDiff(
       await saveAnalysisForCurrentPage({
         title: state.pageContext.title,
@@ -1655,6 +1860,124 @@ async function handleExtract() {
       "info",
     );
   }
+}
+
+async function handleFocusAudit() {
+  if (!state.pageContext.supported) {
+    renderStatusBanner(UNSUPPORTED_PAGE_MESSAGE, "error");
+    return;
+  }
+
+  state.isFocusAuditing = true;
+  renderPageContext();
+
+  const [response, colorResponse] = await Promise.all([
+    sendToContent({ action: "auditFocusIndicators" }),
+    state.palette.length
+      ? Promise.resolve(null)
+      : sendToContent({ action: "extractColors" }),
+  ]);
+
+  state.isFocusAuditing = false;
+  renderPageContext();
+
+  if (!response?.pairs?.length) {
+    renderStatusBanner(
+      "No focus indicators were detected on the current page.",
+      "info",
+    );
+    return;
+  }
+
+  state.focusPairs = response.pairs;
+  if (colorResponse?.colors?.length) {
+    setAnalysis(colorResponse.colors, Date.now());
+  }
+  await recomputeAnalysis({
+    colors: state.colors,
+    pairs: getCurrentAnalysisPairs(),
+  });
+
+  const extractedAt = Date.now();
+  state.scanDiff = computeScanDiff(
+    await saveAnalysisForCurrentPage({
+      title: state.pageContext.title,
+      palette: state.palette,
+      extractedAt,
+      issues: summarizeIssuesForStorage(state.issues),
+    }),
+    summarizeIssuesForStorage(state.issues),
+  );
+  state.analysisMeta.extractedAt = extractedAt;
+  await refreshHistory();
+  render();
+  renderStatusBanner(
+    `Focus audit flagged ${response.pairs.length} indicators for WCAG 2.2 review.`,
+    "info",
+  );
+}
+
+async function handleThemeAudit() {
+  if (!state.pageContext.supported) {
+    renderStatusBanner(UNSUPPORTED_PAGE_MESSAGE, "error");
+    return;
+  }
+
+  state.isThemeAuditing = true;
+  renderPageContext();
+
+  const response = await sendToContent({ action: "auditThemes" });
+
+  state.isThemeAuditing = false;
+  renderPageContext();
+
+  if (!response?.variants?.length) {
+    renderStatusBanner(
+      response?.notes?.[0] || "No alternate theme hooks were detected.",
+      "info",
+    );
+    state.themeAudit = null;
+    render();
+    return;
+  }
+
+  const variants = await Promise.all(
+    response.variants.map(async (variant) => {
+      const analysis = await runAnalysisWorker({
+        colors: (variant.palette || []).map((entry) => entry.hex),
+        pairs: variant.pairs || [],
+        settings: state.settings,
+      });
+      const summary = summarizeIssueList(analysis.issues, state.settings);
+      return {
+        label: variant.label,
+        mode: variant.mode,
+        note: variant.note,
+        issueCount: summary.total,
+        failCount: summary.fails,
+        paletteCount: (variant.palette || []).length,
+      };
+    }),
+  );
+
+  const baseline =
+    variants.find((variant) => variant.mode === "current") || variants[0];
+  variants.forEach((variant) => {
+    variant.issueDelta = baseline
+      ? variant.issueCount - baseline.issueCount
+      : 0;
+    variant.failDelta = baseline ? variant.failCount - baseline.failCount : 0;
+  });
+
+  state.themeAudit = {
+    variants,
+    notes: response.notes || [],
+  };
+  render();
+  renderStatusBanner(
+    `Theme audit compared ${variants.length} variants on this page.`,
+    "info",
+  );
 }
 
 async function handlePicker() {
@@ -1701,6 +2024,14 @@ extractBtn.addEventListener("click", () => {
   void handleExtract();
 });
 
+focusAuditBtn.addEventListener("click", () => {
+  void handleFocusAudit();
+});
+
+themeAuditBtn.addEventListener("click", () => {
+  void handleThemeAudit();
+});
+
 pickerBtn.addEventListener("click", () => {
   void handlePicker();
 });
@@ -1727,6 +2058,8 @@ settingsBtn.addEventListener("click", () => {
   consoleWarningsToggle.checked = state.settings.consoleWarnings || false;
   standardSelect.value = state.settings.standard || "WCAG21";
   cvdSelect.value = state.settings.cvdMode || "none";
+  lowVisionSelect.value = state.settings.lowVisionMode || "none";
+  splitViewToggle.checked = Boolean(state.settings.splitView);
   githubRepoUrlInput.value = state.settings.githubRepoUrl || "";
 });
 
@@ -1765,6 +2098,8 @@ exportBtn.addEventListener("click", () => {
       apcaLevel: issue.apcaLevel,
       textPreview: issue.textPreview,
     })),
+    themeAudit: state.themeAudit,
+    domainComparison: state.domainComparison,
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -1790,28 +2125,35 @@ consoleWarningsToggle.addEventListener("change", async (e) => {
 standardSelect.addEventListener("change", (e) => {
   state.settings.standard = e.target.value;
   void saveSettings();
-  if (state.colors.length) {
-    state.combinations = buildCombinationsData(state.colors);
-  }
-  if (state.elementPairs.length) {
-    state.issues = buildIssuesData(state.elementPairs);
-  }
-  render();
+  void recomputeAnalysis({
+    colors: state.colors,
+    pairs: getCurrentAnalysisPairs(),
+    preserveIssues: !getCurrentAnalysisPairs().length,
+  }).then(() => render());
 });
 
 cvdSelect.addEventListener("change", (e) => {
   const type = e.target.value;
   state.settings.cvdMode = type;
   void saveSettings();
-  void sendToContent({ action: "simulateColorBlindness", type });
+  void applyVisionSettings();
+  void recomputeAnalysis({
+    colors: state.colors,
+    pairs: getCurrentAnalysisPairs(),
+    preserveIssues: !getCurrentAnalysisPairs().length,
+  }).then(() => render());
+});
 
-  if (state.colors.length) {
-    state.combinations = buildCombinationsData(state.colors);
-  }
-  if (state.elementPairs.length) {
-    state.issues = buildIssuesData(state.elementPairs);
-  }
-  render();
+lowVisionSelect.addEventListener("change", (e) => {
+  state.settings.lowVisionMode = e.target.value;
+  void saveSettings();
+  void applyVisionSettings();
+});
+
+splitViewToggle.addEventListener("change", (e) => {
+  state.settings.splitView = e.target.checked;
+  void saveSettings();
+  void applyVisionSettings();
 });
 
 githubRepoUrlInput.addEventListener("input", (e) => {
@@ -1834,7 +2176,9 @@ historyList.addEventListener("click", async (e) => {
   if (scan?.extractedAt) {
     setAnalysis(scan.palette, scan.extractedAt);
     state.elementPairs = [];
+    state.focusPairs = [];
     state.issues = scan.issues || [];
+    state.themeAudit = null;
     await refreshHistory();
     render();
   }
@@ -1883,8 +2227,17 @@ issuesList.addEventListener("click", (event) => {
 
   const btn = event.target.closest(".btn-pin");
   if (btn) {
-    const { key, selector, fg, bg, ratio, level, wcagLevel, apcaLevel, apcaScore } =
-      btn.dataset;
+    const {
+      key,
+      selector,
+      fg,
+      bg,
+      ratio,
+      level,
+      wcagLevel,
+      apcaLevel,
+      apcaScore,
+    } = btn.dataset;
     togglePin({
       id: `issue:${key}`,
       key,
@@ -1948,7 +2301,9 @@ issuesList.addEventListener("click", (event) => {
 
 batchCopyBtn.addEventListener("click", () => {
   const selectedIssues = state.selectedIssueKeys
-    .map((key) => state.issues.find((issue) => getIssueStableKey(issue) === key))
+    .map((key) =>
+      state.issues.find((issue) => getIssueStableKey(issue) === key),
+    )
     .filter(Boolean);
 
   const rules = selectedIssues
@@ -2002,13 +2357,11 @@ chrome.runtime.onMessage.addListener((message) => {
   cvdSelect.value = message.type;
   void saveSettings();
 
-  if (state.colors.length) {
-    state.combinations = buildCombinationsData(state.colors);
-  }
-  if (state.elementPairs.length) {
-    state.issues = buildIssuesData(state.elementPairs);
-  }
-  render();
+  void recomputeAnalysis({
+    colors: state.colors,
+    pairs: getCurrentAnalysisPairs(),
+    preserveIssues: !getCurrentAnalysisPairs().length,
+  }).then(() => render());
 });
 
 chrome.tabs.onActivated.addListener(() => {

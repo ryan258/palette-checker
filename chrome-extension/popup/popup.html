@@ -124,6 +124,14 @@
             </svg>
           </button>
         </div>
+        <div class="header-actions header-actions-audit">
+          <button type="button" id="focus-audit-btn" class="btn btn-secondary">
+            Focus Audit
+          </button>
+          <button type="button" id="theme-audit-btn" class="btn btn-secondary">
+            Theme Audit
+          </button>
+        </div>
       </section>
 
       <div
@@ -236,6 +244,15 @@
         <p id="diff-summary" class="diff-summary"></p>
       </section>
 
+      <section id="theme-section" class="panel-card" style="display: none">
+        <div class="section-header">
+          <h2>Theme Audit</h2>
+          <span id="theme-count" class="count-indicator"></span>
+        </div>
+        <div id="theme-summary" class="theme-summary"></div>
+        <div id="theme-list" class="theme-list"></div>
+      </section>
+
       <section id="history-section" class="panel-card" style="display: none">
         <div class="section-header">
           <h2>Scan History</h2>
@@ -250,6 +267,15 @@
           <span id="color-count" class="count-indicator"></span>
         </div>
         <div id="palette-swatches" class="palette-swatches"></div>
+      </section>
+
+      <section id="domain-section" class="panel-card" style="display: none">
+        <div class="section-header">
+          <h2>Domain Comparison</h2>
+          <span id="domain-count" class="count-indicator"></span>
+        </div>
+        <div id="domain-summary" class="theme-summary"></div>
+        <div id="domain-list" class="theme-list"></div>
       </section>
 
       <section id="results-section" class="panel-card" style="display: none">
@@ -386,6 +412,25 @@
             <option value="achromatopsia">Achromatopsia (Monochromacy)</option>
             <option value="achromatomaly">Achromatomaly (Low color)</option>
           </select>
+        </label>
+        <label class="setting-group">
+          <div class="setting-info">
+            <strong>Low Vision Simulation</strong>
+            <p>Preview blur, reduced contrast, and field-loss conditions.</p>
+          </div>
+          <select id="low-vision-select">
+            <option value="none">Off</option>
+            <option value="low-acuity">Low Acuity</option>
+            <option value="contrast-loss">Contrast Sensitivity Loss</option>
+            <option value="field-loss">Field Loss</option>
+          </select>
+        </label>
+        <label class="setting-row" style="margin-bottom: 12px">
+          <div class="setting-info">
+            <strong>Split-Screen Compare</strong>
+            <p>Show the live page normal on the left and simulated on the right.</p>
+          </div>
+          <input type="checkbox" id="split-view-toggle" />
         </label>
         <label class="setting-group">
           <div class="setting-info">
