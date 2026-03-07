@@ -27,11 +27,11 @@ The MVP is live. It works.
 
 The biggest problem with color extraction is that a flat palette loses context. Knowing `#333` and `#fff` both appear on a page tells you nothing. Knowing that a `<p>` with `color: #333` sits inside a `<div>` with `background: #fff` tells you everything.
 
-- [ ] **Element-Pair Detection** - Instead of extracting a flat list of colors, detect actual text-on-background pairs as they exist in the DOM. Walk each text node, resolve its computed `color`, walk ancestors to resolve its effective `background-color` (compositing semi-transparent layers), and report the real contrast relationship.
-- [ ] **Issue-Centric Results View** - Default view shows failing element pairs, sorted by severity. Each result links to the DOM element. Click to scroll-and-highlight on the page.
-- [ ] **CSS Selector in Results** - Show a minimal CSS selector for each flagged element so developers can find it in their code immediately (e.g., `.hero-section > h2`, `nav a:nth-child(3)`).
-- [ ] **Effective Background Compositing** - Properly composite semi-transparent backgrounds, layered backgrounds, and CSS gradients to compute the actual rendered background color behind text. Handle `opacity` inheritance.
-- [ ] **Ignore Invisible Content** - Skip elements hidden by `clip`, `overflow: hidden`, `text-indent: -9999px`, zero-height containers, and `aria-hidden="true"`.
+- [x] **Element-Pair Detection** - Instead of extracting a flat list of colors, detect actual text-on-background pairs as they exist in the DOM. Walk each text node, resolve its computed `color`, walk ancestors to resolve its effective `background-color` (compositing semi-transparent layers), and report the real contrast relationship.
+- [x] **Issue-Centric Results View** - Default view shows failing element pairs, sorted by severity. Each result links to the DOM element. Click to scroll-and-highlight on the page.
+- [x] **CSS Selector in Results** - Show a minimal CSS selector for each flagged element so developers can find it in their code immediately (e.g., `.hero-section > h2`, `nav a:nth-child(3)`).
+- [x] **Effective Background Compositing** - Properly composite semi-transparent backgrounds, layered backgrounds, and CSS gradients to compute the actual rendered background color behind text. Handle `opacity` inheritance.
+- [x] **Ignore Invisible Content** - Skip elements hidden by `clip`, `overflow: hidden`, `text-indent: -9999px`, zero-height containers, and `aria-hidden="true"`.
 
 ---
 
@@ -59,7 +59,7 @@ This is where most tools stop. axe tells you something fails. Lighthouse gives y
 - [ ] **Live Preview Fixes on Page** - Inject a temporary stylesheet to preview the suggested fix directly on the page. Toggle between original and fixed. No page reload.
 - [ ] **One-Click Copy Fix** - Copy the fix as a CSS rule: `/* ChromaCheck fix: contrast 3.2:1 -> 4.5:1 */ .hero-title { color: #1a3a5c; }`. Ready to paste into a stylesheet.
 - [ ] **Batch Fix Mode** - Select multiple failing pairs and generate a single CSS patch file that fixes all of them.
-- [ ] **Plain-Language Explanations** - Every failure should explain *why* it matters and *who* it affects, not just cite "WCAG 1.4.3." Example: "This text will be unreadable for the ~217 million people with moderate visual impairments. Increasing contrast to 4.5:1 fixes it." Teach while you flag.
+- [ ] **Plain-Language Explanations** - Every failure should explain _why_ it matters and _who_ it affects, not just cite "WCAG 1.4.3." Example: "This text will be unreadable for the ~217 million people with moderate visual impairments. Increasing contrast to 4.5:1 fixes it." Teach while you flag.
 
 ---
 
@@ -184,14 +184,14 @@ These guide every decision on the roadmap:
 
 ## Competitive Positioning
 
-| Tool | Strength | ChromaCheck's Edge |
-|------|----------|--------------------|
-| **axe DevTools** | Gold-standard full WCAG engine | axe buries contrast in a 200-item audit. We go deeper on color: palette matrix, APCA font tables, fix suggestions, color blindness sim. |
-| **WAVE** | Visual overlay, zero learning curve | WAVE clutters page layouts with icons and has no APCA, no palette analysis, no fix workflow. Dated UI. |
-| **Stark** | Designer-first, Figma integration | Stark paywalls real features. We're free, browser-native, and do live-page analysis Stark's extension can't match. |
-| **Lighthouse** | Breadth, CI integration, scores | Lighthouse gives a number but no workflow. We complement it: Lighthouse for breadth, ChromaCheck for depth on color. |
-| **Colour Contrast Analyser** | Trusted, simple | CCA is one pair at a time. We do full palette matrix, page extraction, and simulations in one tool. |
-| **Polypane** | Built-in, multi-viewport | Polypane requires switching browsers and paying. We work inside Chrome where developers already are. |
+| Tool                         | Strength                            | ChromaCheck's Edge                                                                                                                      |
+| ---------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **axe DevTools**             | Gold-standard full WCAG engine      | axe buries contrast in a 200-item audit. We go deeper on color: palette matrix, APCA font tables, fix suggestions, color blindness sim. |
+| **WAVE**                     | Visual overlay, zero learning curve | WAVE clutters page layouts with icons and has no APCA, no palette analysis, no fix workflow. Dated UI.                                  |
+| **Stark**                    | Designer-first, Figma integration   | Stark paywalls real features. We're free, browser-native, and do live-page analysis Stark's extension can't match.                      |
+| **Lighthouse**               | Breadth, CI integration, scores     | Lighthouse gives a number but no workflow. We complement it: Lighthouse for breadth, ChromaCheck for depth on color.                    |
+| **Colour Contrast Analyser** | Trusted, simple                     | CCA is one pair at a time. We do full palette matrix, page extraction, and simulations in one tool.                                     |
+| **Polypane**                 | Built-in, multi-viewport            | Polypane requires switching browsers and paying. We work inside Chrome where developers already are.                                    |
 
 ### What we deliberately don't build
 

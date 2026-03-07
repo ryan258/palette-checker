@@ -70,6 +70,8 @@ const state = {
   palette: [],
   colors: [],
   combinations: [],
+  elementPairs: [],
+  issues: [],
   activeFilters: FILTER_KEYS.reduce((acc, key) => {
     acc[key] = true;
     return acc;
@@ -111,6 +113,9 @@ const resultsSection = document.getElementById("results-section");
 const resultsCount = document.getElementById("results-count");
 const combinationsGrid = document.getElementById("combinations-grid");
 const filterLegend = document.getElementById("filter-legend");
+const issuesSection = document.getElementById("issues-section");
+const issuesList = document.getElementById("issues-list");
+const issuesCount = document.getElementById("issues-count");
 const emptyState = document.getElementById("empty-state");
 
 let syncToken = 0;
@@ -259,6 +264,8 @@ function clearAnalysis() {
   state.palette = [];
   state.colors = [];
   state.combinations = [];
+  state.elementPairs = [];
+  state.issues = [];
   state.analysisMeta.extractedAt = null;
 }
 
@@ -521,6 +528,121 @@ function renderCombinations() {
   updateEmptyStateVisibility();
 }
 
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function getContextualComplianceLevel(ratio, fontSize, fontWeight) {
+  const size = parseFloat(fontSize);
+  const weight = parseInt(fontWeight, 10) || 400;
+  const isLarge = size >= 24 || (size >= 18.66 && weight >= 700);
+
+  if (isLarge) {
+    if (ratio >= 4.5) return "AAA";
+    if (ratio >= 3) return "AA Large";
+    return "Fail";
+  }
+
+  if (ratio >= 7) return "AAA";
+  if (ratio >= 4.5) return "AA";
+  return "Fail";
+}
+
+function buildIssuesData(pairs) {
+  return pairs
+    .map((pair) => {
+      const wcagRatio = getContrastRatio(pair.textColor, pair.bgColor);
+      const wcagLevel = getContextualComplianceLevel(
+        wcagRatio,
+        pair.fontSize,
+        pair.fontWeight,
+      );
+      const apcaScore = calcAPCA(pair.textColor, pair.bgColor);
+      const apcaLevel = getAPCAComplianceLevel(apcaScore);
+      return { ...pair, wcagRatio, wcagLevel, apcaScore, apcaLevel };
+    })
+    .sort((a, b) => {
+      const levelDelta =
+        getLevelRank(a.wcagLevel) - getLevelRank(b.wcagLevel);
+      if (levelDelta !== 0) return levelDelta;
+      return a.wcagRatio - b.wcagRatio;
+    })
+    .slice(0, 500);
+}
+
+function getIssueSummary() {
+  let fails = 0;
+  let warnings = 0;
+  state.issues.forEach((i) => {
+    if (i.wcagLevel === "Fail") fails += 1;
+    else if (i.wcagLevel === "AA Large") warnings += 1;
+  });
+  return { total: state.issues.length, fails, warnings };
+}
+
+function renderIssues() {
+  issuesList.innerHTML = "";
+
+  if (state.issues.length === 0) {
+    issuesSection.style.display = "none";
+    issuesCount.textContent = "";
+    updateEmptyStateVisibility();
+    return;
+  }
+
+  issuesSection.style.display = "";
+  const summary = getIssueSummary();
+  const problemCount = summary.fails + summary.warnings;
+  issuesCount.textContent = problemCount
+    ? `${problemCount} failing of ${summary.total} elements`
+    : `${summary.total} elements — all passing`;
+
+  const fragment = document.createDocumentFragment();
+
+  state.issues.forEach((issue) => {
+    const row = document.createElement("article");
+    row.className = "issue-row";
+    row.dataset.issueId = issue.id;
+    row.setAttribute("role", "button");
+    row.setAttribute("tabindex", "0");
+    row.setAttribute(
+      "aria-label",
+      `${issue.wcagLevel}: ${issue.selector} — ${issue.textPreview}`,
+    );
+
+    row.innerHTML = `
+      <div class="combo-preview-mini" style="background:${issue.bgColor};color:${issue.textColor};">Aa</div>
+      <div class="issue-info">
+        <code class="issue-selector">${escapeHtml(issue.selector)}</code>
+        <div class="issue-meta">
+          <span class="issue-tag">${escapeHtml(issue.tagName)}</span>
+          <span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>
+          <span class="issue-text-preview">${escapeHtml(issue.textPreview)}</span>
+        </div>
+        <div class="combo-scores">
+          <div class="score-group">
+            <span class="score-label">WCAG</span>
+            <span class="score-value ${issue.wcagRatio >= 4.5 ? "pass" : "fail"}">${formatContrastRatio(issue.wcagRatio)}</span>
+            <span class="status-badge ${getStatusBadgeClass(issue.wcagLevel)}">${issue.wcagLevel}</span>
+          </div>
+          <div class="score-group">
+            <span class="score-label">APCA</span>
+            <span class="score-value ${Math.abs(issue.apcaScore) >= 60 ? "pass" : "fail"}">${formatAPCAScore(issue.apcaScore)}</span>
+            <span class="status-badge ${getStatusBadgeClass(issue.apcaLevel)}">${issue.apcaLevel}</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    fragment.appendChild(row);
+  });
+
+  issuesList.appendChild(fragment);
+  updateEmptyStateVisibility();
+}
+
 function renderEmptyState() {
   emptyState.innerHTML = state.pageContext.supported
     ? EMPTY_STATE_DEFAULT
@@ -531,9 +653,11 @@ function updateEmptyStateVisibility() {
   const hasPalette = paletteSection.style.display !== "none";
   const hasPicked = pickedSection.style.display !== "none";
   const hasResults = resultsSection.style.display !== "none";
+  const hasIssues = issuesSection.style.display !== "none";
 
   renderEmptyState();
-  emptyState.style.display = hasPalette || hasPicked || hasResults ? "none" : "";
+  emptyState.style.display =
+    hasPalette || hasPicked || hasResults || hasIssues ? "none" : "";
 }
 
 function filterCombinations() {
@@ -645,8 +769,12 @@ async function syncWorkspaceFromActiveTab() {
     clearAnalysis();
   }
 
+  state.elementPairs = [];
+  state.issues = [];
+
   renderPageContext();
   renderMetrics();
+  renderIssues();
   renderPalette();
   renderCombinations();
   clearStatusBanner();
@@ -660,20 +788,37 @@ async function handleExtract() {
   }
 
   setExtractLoading(true);
-  const response = await sendToContent({ action: "extractColors" });
+
+  const [colorResponse, pairsResponse] = await Promise.all([
+    sendToContent({ action: "extractColors" }),
+    sendToContent({ action: "extractElementPairs" }),
+  ]);
+
   setExtractLoading(false);
 
-  if (!response?.colors?.length) {
+  if (!colorResponse?.colors?.length && !pairsResponse?.pairs?.length) {
     renderStatusBanner(EXTRACT_ERROR_MESSAGE, "error");
     return;
   }
 
   const extractedAt = Date.now();
-  setAnalysis(response.colors, extractedAt);
-  await saveAnalysisForCurrentPage(response.colors, extractedAt);
+
+  if (colorResponse?.colors?.length) {
+    setAnalysis(colorResponse.colors, extractedAt);
+    await saveAnalysisForCurrentPage(colorResponse.colors, extractedAt);
+  }
+
+  if (pairsResponse?.pairs?.length) {
+    state.elementPairs = pairsResponse.pairs;
+    state.issues = buildIssuesData(pairsResponse.pairs);
+  } else {
+    state.elementPairs = [];
+    state.issues = [];
+  }
 
   renderPageContext();
   renderMetrics();
+  renderIssues();
   renderPalette();
   renderCombinations();
   clearStatusBanner();
@@ -733,6 +878,26 @@ clearPickedBtn.addEventListener("click", () => {
     clearStatusBanner();
   }
   void clearPickerState();
+});
+
+issuesList.addEventListener("click", (event) => {
+  const row = event.target.closest(".issue-row");
+  if (!row) return;
+  const id = row.dataset.issueId;
+  if (id !== undefined) {
+    void sendToContent({ action: "highlightElement", id });
+  }
+});
+
+issuesList.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const row = event.target.closest(".issue-row");
+  if (!row) return;
+  event.preventDefault();
+  const id = row.dataset.issueId;
+  if (id !== undefined) {
+    void sendToContent({ action: "highlightElement", id });
+  }
 });
 
 filterLegend.addEventListener("click", (event) => {
