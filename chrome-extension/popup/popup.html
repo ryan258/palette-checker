@@ -18,7 +18,9 @@
           </p>
         </div>
         <div class="hero-context">
-          <span id="page-domain" class="page-chip page-chip-accent">Current page</span>
+          <span id="page-domain" class="page-chip page-chip-accent"
+            >Current page</span
+          >
           <span id="scan-status" class="page-chip">Not scanned yet</span>
         </div>
       </header>
@@ -30,28 +32,73 @@
         </div>
         <p id="page-title" class="page-title">Open a page to start.</p>
         <p id="page-url" class="page-url">
-          Switch to a regular webpage to scan colors and inspect live
-          contrast.
+          Switch to a regular webpage to scan colors and inspect live contrast.
         </p>
         <div class="header-actions">
           <button type="button" id="extract-btn" class="btn btn-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9m-9 9a9 9 0 0 1 9-9"/>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path
+                d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9m-9 9a9 9 0 0 1 9-9"
+              />
             </svg>
             Scan Page Palette
           </button>
-          <button type="button" id="picker-btn" class="btn btn-secondary" title="Pick an element to check its text/background contrast">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m2 22 1-1h3l9-9"/>
-              <path d="M3 21v-3l9-9"/>
-              <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4z"/>
+          <button
+            type="button"
+            id="picker-btn"
+            class="btn btn-secondary"
+            title="Pick an element to check its text/background contrast"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m2 22 1-1h3l9-9" />
+              <path d="M3 21v-3l9-9" />
+              <path
+                d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4z"
+              />
             </svg>
             Inspect Element
           </button>
-          <button type="button" id="settings-btn" class="btn-icon" title="Extension Settings">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <button
+            type="button"
+            id="settings-btn"
+            class="btn-icon"
+            title="Extension Settings"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
               <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+              ></path>
             </svg>
           </button>
         </div>
@@ -62,45 +109,69 @@
         class="status-banner"
         role="status"
         aria-live="polite"
-        style="display:none"
+        style="display: none"
       ></div>
 
       <section class="metrics-grid" aria-label="Analysis summary">
         <article class="panel-card metric-card">
           <span class="metric-label">Palette</span>
           <strong id="metric-colors" class="metric-value">0</strong>
-          <span id="metric-colors-detail" class="metric-detail">Scan a page to map its dominant colors.</span>
+          <span id="metric-colors-detail" class="metric-detail"
+            >Scan a page to map its dominant colors.</span
+          >
         </article>
         <article class="panel-card metric-card">
           <span class="metric-label">Pair Checks</span>
           <strong id="metric-pairs" class="metric-value">0</strong>
-          <span id="metric-pairs-detail" class="metric-detail">Every color is tested against every other color.</span>
+          <span id="metric-pairs-detail" class="metric-detail"
+            >Every color is tested against every other color.</span
+          >
         </article>
         <article class="panel-card metric-card metric-card-alert">
           <span class="metric-label">WCAG Fails</span>
           <strong id="metric-fails" class="metric-value">0</strong>
-          <span id="metric-fails-detail" class="metric-detail">Failing combinations rise to the top.</span>
+          <span id="metric-fails-detail" class="metric-detail"
+            >Failing combinations rise to the top.</span
+          >
         </article>
         <article class="panel-card metric-card">
           <span class="metric-label">AA or Better</span>
           <strong id="metric-pass" class="metric-value">0</strong>
-          <span id="metric-pass-detail" class="metric-detail">AA and AAA combinations ready for body text.</span>
+          <span id="metric-pass-detail" class="metric-detail"
+            >AA and AAA combinations ready for body text.</span
+          >
         </article>
       </section>
 
-      <section id="picked-section" class="panel-card" style="display:none">
+      <section id="picked-section" class="panel-card" style="display: none">
         <div class="section-header">
           <h2>Element Check</h2>
-          <button type="button" id="clear-picked" class="btn-icon" title="Clear inspected element">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          <button
+            type="button"
+            id="clear-picked"
+            class="btn-icon"
+            title="Clear inspected element"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
         </div>
         <div id="picked-result" class="picked-result"></div>
       </section>
 
-      <section id="pinned-section" class="panel-card" style="display:none">
+      <section id="pinned-section" class="panel-card" style="display: none">
         <div class="section-header">
           <h2>Pinned Results</h2>
           <span id="pinned-count" class="count-indicator"></span>
@@ -108,11 +179,14 @@
         <div id="pinned-list" class="pinned-list"></div>
       </section>
 
-      <section id="issues-section" class="panel-card" style="display:none">
+      <section id="issues-section" class="panel-card" style="display: none">
         <div class="section-header section-header-stack">
           <div>
             <h2>Page Issues</h2>
-            <p class="section-subcopy">Real text-on-background pairs detected in the DOM, sorted by severity.</p>
+            <p class="section-subcopy">
+              Real text-on-background pairs detected in the DOM, sorted by
+              severity.
+            </p>
           </div>
           <div class="filter-tools">
             <span id="issues-count" class="count-indicator"></span>
@@ -121,7 +195,7 @@
         <div id="issues-list" class="issues-list"></div>
       </section>
 
-      <section id="history-section" class="panel-card" style="display:none">
+      <section id="history-section" class="panel-card" style="display: none">
         <div class="section-header">
           <h2>Scan History</h2>
           <span id="history-count" class="count-indicator"></span>
@@ -129,7 +203,7 @@
         <div id="history-list" class="history-list"></div>
       </section>
 
-      <section id="palette-section" class="panel-card" style="display:none">
+      <section id="palette-section" class="panel-card" style="display: none">
         <div class="section-header">
           <h2>Extracted Palette</h2>
           <span id="color-count" class="count-indicator"></span>
@@ -137,19 +211,54 @@
         <div id="palette-swatches" class="palette-swatches"></div>
       </section>
 
-      <section id="results-section" class="panel-card" style="display:none">
+      <section id="results-section" class="panel-card" style="display: none">
         <div class="section-header section-header-stack">
           <div>
             <h2>Contrast Matrix</h2>
-            <p class="section-subcopy">Sorted by WCAG risk so failing pairs surface first.</p>
+            <p class="section-subcopy">
+              Sorted by WCAG risk so failing pairs surface first.
+            </p>
           </div>
           <div class="filter-tools">
             <span id="results-count" class="count-indicator"></span>
-            <div class="legend" id="filter-legend" role="group" aria-label="Filter by WCAG level">
-              <button type="button" class="badge badge-aaa" data-filter="AAA" aria-pressed="true">AAA</button>
-              <button type="button" class="badge badge-aa" data-filter="AA" aria-pressed="true">AA</button>
-              <button type="button" class="badge badge-large" data-filter="AA Large" aria-pressed="true">AA Large</button>
-              <button type="button" class="badge badge-fail" data-filter="Fail" aria-pressed="true">Fail</button>
+            <div
+              class="legend"
+              id="filter-legend"
+              role="group"
+              aria-label="Filter by WCAG level"
+            >
+              <button
+                type="button"
+                class="badge badge-aaa"
+                data-filter="AAA"
+                aria-pressed="true"
+              >
+                AAA
+              </button>
+              <button
+                type="button"
+                class="badge badge-aa"
+                data-filter="AA"
+                aria-pressed="true"
+              >
+                AA
+              </button>
+              <button
+                type="button"
+                class="badge badge-large"
+                data-filter="AA Large"
+                aria-pressed="true"
+              >
+                AA Large
+              </button>
+              <button
+                type="button"
+                class="badge badge-fail"
+                data-filter="Fail"
+                aria-pressed="true"
+              >
+                Fail
+              </button>
             </div>
           </div>
         </div>
@@ -165,23 +274,107 @@
       role="dialog"
       aria-modal="true"
       aria-hidden="true"
-      style="display:none"
+      style="display: none"
     >
       <div class="popover-header">
         <h3>Settings</h3>
-        <button type="button" id="close-settings" class="btn-icon" aria-label="Close">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        <button
+          type="button"
+          id="close-settings"
+          class="btn-icon"
+          aria-label="Close"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
       </div>
       <div class="popover-content">
+        <label
+          class="setting-row"
+          style="
+            margin-bottom: 12px;
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 6px;
+          "
+        >
+          <div class="setting-info" style="width: 100%">
+            <strong>Primary Standard</strong>
+            <p>Score pairs based on this accessibility standard.</p>
+          </div>
+          <select
+            id="standard-select"
+            class="cvd-select"
+            style="
+              width: 100%;
+              padding: 6px;
+              border-radius: 4px;
+              background: rgba(15, 23, 42, 0.4);
+              color: white;
+              border: 1px solid rgba(148, 163, 184, 0.2);
+            "
+          >
+            <option value="WCAG21">WCAG 2.1 (Current)</option>
+            <option value="WCAG22">WCAG 2.2</option>
+            <option value="APCA">APCA (WCAG 3.0 Draft)</option>
+          </select>
+        </label>
+
         <label class="setting-row">
           <div class="setting-info">
             <strong>Auto-sync Results</strong>
             <p>Automatically re-scan when the page changes.</p>
           </div>
           <input type="checkbox" id="auto-sync-toggle" />
+        </label>
+
+        <label
+          class="setting-row"
+          style="
+            margin-top: 12px;
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 6px;
+          "
+        >
+          <div class="setting-info" style="width: 100%">
+            <strong>Color Vision Simulation</strong>
+            <p>Apply an SVG filter to the live page.</p>
+          </div>
+          <select
+            id="color-blindness-select"
+            class="cvd-select"
+            style="
+              width: 100%;
+              padding: 6px;
+              border-radius: 4px;
+              background: rgba(15, 23, 42, 0.4);
+              color: white;
+              border: 1px solid rgba(148, 163, 184, 0.2);
+            "
+          >
+            <option value="none">Normal Vision</option>
+            <option value="protanopia">Protanopia (Red-blind)</option>
+            <option value="protanomaly">Protanomaly (Red-weak)</option>
+            <option value="deuteranopia">Deuteranopia (Green-blind)</option>
+            <option value="deuteranomaly">Deuteranomaly (Green-weak)</option>
+            <option value="tritanopia">Tritanopia (Blue-blind)</option>
+            <option value="tritanomaly">Tritanomaly (Blue-weak)</option>
+            <option value="achromatopsia">Achromatopsia (Monochromacy)</option>
+            <option value="achromatomaly">Achromatomaly (Low color)</option>
+          </select>
         </label>
       </div>
     </div>

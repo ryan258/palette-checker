@@ -90,6 +90,8 @@ const state = {
   },
   settings: {
     autoSync: false,
+    cvdMode: "none",
+    standard: "WCAG21",
   },
   pinnedItems: [],
   isExtracting: false,
@@ -132,6 +134,8 @@ const settingsBtn = document.getElementById("settings-btn");
 const closeSettingsBtn = document.getElementById("close-settings");
 const settingsPopover = document.getElementById("settings-popover");
 const autoSyncToggle = document.getElementById("auto-sync-toggle");
+const standardSelect = document.getElementById("standard-select");
+const cvdSelect = document.getElementById("color-blindness-select");
 const historySection = document.getElementById("history-section");
 const historyList = document.getElementById("history-list");
 const historyCount = document.getElementById("history-count");
@@ -241,6 +245,7 @@ function getStatusBadgeClass(level) {
 function buildCombinationsData(colors) {
   const uniqueColors = [...new Set(colors)];
   const combinations = [];
+  const cvdMode = state.settings.cvdMode || "none";
 
   for (let i = 0; i < uniqueColors.length; i += 1) {
     for (let j = 0; j < uniqueColors.length; j += 1) {
@@ -248,10 +253,18 @@ function buildCombinationsData(colors) {
 
       const textHex = uniqueColors[i];
       const bgHex = uniqueColors[j];
-      const wcagRatio = getContrastRatio(textHex, bgHex);
-      const wcagLevel = getComplianceLevel(wcagRatio);
-      const apcaScore = calcAPCA(textHex, bgHex);
-      const apcaLevel = getAPCAComplianceLevel(apcaScore);
+      const simText = simulateCVD(textHex, cvdMode);
+      const simBg = simulateCVD(bgHex, cvdMode);
+
+      const wcagRatio = getContrastRatio(simText, simBg);
+      const wcagLevel = getContextualComplianceLevel(
+        wcagRatio,
+        16,
+        400,
+        state.settings.standard,
+      );
+      const apcaScore = calcAPCA(simText, simBg);
+      const apcaLevel = getAPCAComplianceLevel(apcaScore, 16, 400);
 
       combinations.push({
         textHex,
@@ -265,6 +278,11 @@ function buildCombinationsData(colors) {
   }
 
   return combinations.sort((a, b) => {
+    if (state.settings.standard === "APCA") {
+      const levelDelta = getLevelRank(a.apcaLevel) - getLevelRank(b.apcaLevel);
+      if (levelDelta !== 0) return levelDelta;
+      return Math.abs(a.apcaScore) - Math.abs(b.apcaScore);
+    }
     const levelDelta = getLevelRank(a.wcagLevel) - getLevelRank(b.wcagLevel);
     if (levelDelta !== 0) return levelDelta;
     return a.wcagRatio - b.wcagRatio;
@@ -302,7 +320,7 @@ async function toggleAutoSync(enabled) {
 
   const tab = await getActiveTab();
   await syncMutationObserverTarget(
-    state.pageContext.supported ? tab?.id ?? null : null,
+    state.pageContext.supported ? (tab?.id ?? null) : null,
   );
 }
 
@@ -749,12 +767,12 @@ function renderCombinations() {
       <div class="combo-info">
         <div class="combo-colors-label">${entry.textHex.toUpperCase()} on ${entry.bgHex.toUpperCase()}</div>
         <div class="combo-scores">
-          <div class="score-group">
+          <div class="score-group ${state.settings.standard === "APCA" ? "inactive-standard" : "active-standard"}">
             <span class="score-label">WCAG</span>
             <span class="score-value ${entry.wcagRatio >= 4.5 ? "pass" : "fail"}">${formatContrastRatio(entry.wcagRatio)}</span>
             <span class="status-badge ${getStatusBadgeClass(entry.wcagLevel)}">${entry.wcagLevel}</span>
           </div>
-          <div class="score-group">
+          <div class="score-group ${state.settings.standard === "APCA" ? "active-standard" : "inactive-standard"}">
             <span class="score-label">APCA</span>
             <span class="score-value ${Math.abs(entry.apcaScore) >= 60 ? "pass" : "fail"}">${formatAPCAScore(entry.apcaScore)}</span>
             <span class="status-badge ${getStatusBadgeClass(entry.apcaLevel)}">${entry.apcaLevel}</span>
@@ -783,36 +801,36 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function getContextualComplianceLevel(ratio, fontSize, fontWeight) {
-  const size = parseFloat(fontSize);
-  const weight = parseInt(fontWeight, 10) || 400;
-  const isLarge = size >= 24 || (size >= 18.66 && weight >= 700);
-
-  if (isLarge) {
-    if (ratio >= 4.5) return "AAA";
-    if (ratio >= 3) return "AA Large";
-    return "Fail";
-  }
-
-  if (ratio >= 7) return "AAA";
-  if (ratio >= 4.5) return "AA";
-  return "Fail";
-}
-
 function buildIssuesData(pairs) {
+  const cvdMode = state.settings.cvdMode || "none";
+
   return pairs
     .map((pair) => {
-      const wcagRatio = getContrastRatio(pair.textColor, pair.bgColor);
+      const simText = simulateCVD(pair.textColor, cvdMode);
+      const simBg = simulateCVD(pair.bgColor, cvdMode);
+
+      const wcagRatio = getContrastRatio(simText, simBg);
       const wcagLevel = getContextualComplianceLevel(
         wcagRatio,
         pair.fontSize,
         pair.fontWeight,
+        state.settings.standard,
       );
-      const apcaScore = calcAPCA(pair.textColor, pair.bgColor);
-      const apcaLevel = getAPCAComplianceLevel(apcaScore);
+      const apcaScore = calcAPCA(simText, simBg);
+      const apcaLevel = getAPCAComplianceLevel(
+        apcaScore,
+        pair.fontSize,
+        pair.fontWeight,
+      );
       return { ...pair, wcagRatio, wcagLevel, apcaScore, apcaLevel };
     })
     .sort((a, b) => {
+      if (state.settings.standard === "APCA") {
+        const levelDelta =
+          getLevelRank(a.apcaLevel) - getLevelRank(b.apcaLevel);
+        if (levelDelta !== 0) return levelDelta;
+        return Math.abs(a.apcaScore) - Math.abs(b.apcaScore);
+      }
       const levelDelta = getLevelRank(a.wcagLevel) - getLevelRank(b.wcagLevel);
       if (levelDelta !== 0) return levelDelta;
       return a.wcagRatio - b.wcagRatio;
@@ -824,8 +842,13 @@ function getIssueSummary() {
   let fails = 0;
   let warnings = 0;
   state.issues.forEach((i) => {
-    if (i.wcagLevel === "Fail") fails += 1;
-    else if (i.wcagLevel === "AA Large") warnings += 1;
+    if (state.settings.standard === "APCA") {
+      if (i.apcaLevel === "Fail") fails += 1;
+      else if (i.apcaLevel === "AA Large") warnings += 1; // "Silver" large text
+    } else {
+      if (i.wcagLevel === "Fail") fails += 1;
+      else if (i.wcagLevel === "AA Large") warnings += 1;
+    }
   });
   return { total: state.issues.length, fails, warnings };
 }
@@ -865,21 +888,29 @@ function renderIssues() {
     );
 
     row.innerHTML = `
-      <div class="combo-preview-mini" style="background:${issue.bgColor};color:${issue.textColor};">Aa</div>
+      <div class="combo-preview-mini" style="background:${issue.bgColor};color:${issue.textColor};">
+        ${
+          issue.type === "target-size"
+            ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>'
+            : issue.type === "non-text"
+              ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
+              : "Aa"
+        }
+      </div>
       <div class="issue-info">
         <code class="issue-selector">${escapeHtml(issue.selector)}</code>
         <div class="issue-meta">
           <span class="issue-tag">${escapeHtml(issue.tagName)}</span>
-          <span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>
+          ${issue.type === "text" || issue.type === "placeholder" ? `<span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>` : ""}
           <span class="issue-text-preview">${escapeHtml(issue.textPreview)}</span>
         </div>
         <div class="combo-scores">
-          <div class="score-group">
+          <div class="score-group ${state.settings.standard === "APCA" ? "inactive-standard" : "active-standard"}">
             <span class="score-label">WCAG</span>
             <span class="score-value ${issue.wcagRatio >= 4.5 ? "pass" : "fail"}">${formatContrastRatio(issue.wcagRatio)}</span>
             <span class="status-badge ${getStatusBadgeClass(issue.wcagLevel)}">${issue.wcagLevel}</span>
           </div>
-          <div class="score-group">
+          <div class="score-group ${state.settings.standard === "APCA" ? "active-standard" : "inactive-standard"}">
             <span class="score-label">APCA</span>
             <span class="score-value ${Math.abs(issue.apcaScore) >= 60 ? "pass" : "fail"}">${formatAPCAScore(issue.apcaScore)}</span>
             <span class="status-badge ${getStatusBadgeClass(issue.apcaLevel)}">${issue.apcaLevel}</span>
@@ -892,6 +923,64 @@ function renderIssues() {
         </svg>
       </button>
     `;
+
+    const isFail =
+      state.settings.standard === "APCA"
+        ? issue.apcaLevel === "Fail"
+        : issue.wcagLevel === "Fail" || issue.wcagLevel === "AA Large";
+
+    if (isFail && issue.type !== "target-size") {
+      const suggestedFg = suggestPassingColor(issue.textColor, issue.bgColor);
+      const suggestedBg = suggestPassingColor(issue.bgColor, issue.textColor);
+      const apcaReq =
+        issue.type === "text" || issue.type === "placeholder"
+          ? getAPCAMinimumRequirements(issue.apcaScore)
+          : null;
+
+      const fixHtml = `
+        <div class="issue-fix-suggestion">
+          <div class="fix-header">Actionable Fixes</div>
+          <div class="fix-options">
+            ${
+              suggestedFg
+                ? `
+              <div class="fix-option">
+                <span class="fix-desc">Change foreground to <strong>${suggestedFg.toUpperCase()}</strong></span>
+                <div class="fix-actions">
+                  <button type="button" class="btn-xs btn-preview-fix" data-selector="${escapeHtml(issue.selector)}" data-prop="${issue.type === "non-text" && issue.tagName === "path" ? "fill" : "color"}" data-val="${suggestedFg}">Preview</button>
+                  <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(issue.selector)} { ${issue.type === "non-text" && issue.tagName === "path" ? "fill" : "color"}: ${suggestedFg}; }">Copy CSS</button>
+                </div>
+              </div>
+            `
+                : ""
+            }
+            ${
+              suggestedBg
+                ? `
+              <div class="fix-option">
+                <span class="fix-desc">Change background to <strong>${suggestedBg.toUpperCase()}</strong></span>
+                <div class="fix-actions">
+                  <button type="button" class="btn-xs btn-preview-fix" data-selector="${escapeHtml(issue.selector)}" data-prop="background" data-val="${suggestedBg}">Preview</button>
+                  <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(issue.selector)} { background-color: ${suggestedBg}; }">Copy CSS</button>
+                </div>
+              </div>
+            `
+                : ""
+            }
+            ${
+              apcaReq
+                ? `
+            <div class="fix-option fix-option-apca">
+              <span class="fix-desc">APCA Font Requirement: <strong>${apcaReq}</strong></span>
+            </div>`
+                : ""
+            }
+          </div>
+        </div>
+      `;
+      row.innerHTML += fixHtml;
+    }
+
     const pinButton = row.querySelector(".btn-pin");
     if (pinButton) {
       pinButton.dataset.selector = issue.selector;
@@ -1051,7 +1140,7 @@ async function syncWorkspaceFromActiveTab() {
 
   await syncMutationObserverTarget(
     state.settings.autoSync && nextPageContext.supported
-      ? activeTab?.id ?? null
+      ? (activeTab?.id ?? null)
       : null,
   );
   if (token !== syncToken) return;
@@ -1163,6 +1252,8 @@ settingsBtn.addEventListener("click", () => {
   settingsPopover.style.display = "block";
   settingsPopover.setAttribute("aria-hidden", "false");
   autoSyncToggle.checked = state.settings.autoSync;
+  standardSelect.value = state.settings.standard || "WCAG21";
+  cvdSelect.value = state.settings.cvdMode || "none";
 });
 
 closeSettingsBtn.addEventListener("click", () => {
@@ -1172,6 +1263,29 @@ closeSettingsBtn.addEventListener("click", () => {
 
 autoSyncToggle.addEventListener("change", (e) => {
   toggleAutoSync(e.target.checked);
+});
+
+standardSelect.addEventListener("change", (e) => {
+  state.settings.standard = e.target.value;
+  void saveSettings();
+  if (state.colors.length || state.elementPairs.length) {
+    state.combinations = buildCombinationsData(state.colors);
+    state.issues = buildIssuesData(state.elementPairs);
+    render();
+  }
+});
+
+cvdSelect.addEventListener("change", (e) => {
+  const type = e.target.value;
+  state.settings.cvdMode = type;
+  void saveSettings();
+  void sendToContent({ action: "simulateColorBlindness", type });
+
+  if (state.colors.length || state.elementPairs.length) {
+    state.combinations = buildCombinationsData(state.colors);
+    state.issues = buildIssuesData(state.elementPairs);
+    render();
+  }
 });
 
 historyList.addEventListener("click", async (e) => {
@@ -1224,6 +1338,41 @@ issuesList.addEventListener("click", (event) => {
 
   const row = event.target.closest(".issue-row");
   if (!row) return;
+
+  // Handle fix action clicks specifically without triggering the highlight
+  if (event.target.classList.contains("btn-copy-fix")) {
+    const rule = event.target.dataset.rule;
+    void copyToClipboard(rule);
+    return;
+  }
+
+  if (event.target.classList.contains("btn-preview-fix")) {
+    const { selector, prop, val } = event.target.dataset;
+    const isReverting = event.target.classList.contains("active");
+
+    if (isReverting) {
+      void sendToContent({ action: "revertPreviewFix" });
+      event.target.classList.remove("active");
+      event.target.textContent = "Preview";
+    } else {
+      // Clear other active preview buttons
+      document.querySelectorAll(".btn-preview-fix.active").forEach((b) => {
+        b.classList.remove("active");
+        b.textContent = "Preview";
+      });
+
+      void sendToContent({
+        action: "previewFix",
+        selector,
+        prop,
+        val,
+      });
+      event.target.classList.add("active");
+      event.target.textContent = "Revert";
+    }
+    return;
+  }
+
   const id = row.dataset.issueId;
   if (id !== undefined) {
     void sendToContent({ action: "highlightElement", id });

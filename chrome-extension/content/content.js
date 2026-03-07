@@ -298,28 +298,176 @@
       const style = window.getComputedStyle(el);
 
       const textRGBA = parseRGBA(style.color);
-      if (!textRGBA || textRGBA.a === 0) continue;
+      if (textRGBA && textRGBA.a > 0) {
+        const renderedPair = getRenderedPair(el, textRGBA);
+        const textColor = componentsToHex(renderedPair.text);
+        const bgColor = componentsToHex(renderedPair.background);
 
-      const renderedPair = getRenderedPair(el, textRGBA);
-      const textColor = componentsToHex(renderedPair.text);
-      const bgColor = componentsToHex(renderedPair.background);
+        if (textColor !== bgColor) {
+          const id = String(idCounter++);
+          el.setAttribute("data-chromacheck-id", id);
+          pairs.push({
+            id,
+            textColor,
+            bgColor,
+            selector: getMinimalSelector(el),
+            textPreview: directText.slice(0, 60),
+            tagName: el.tagName.toLowerCase(),
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+            type: "text",
+          });
+        }
+      }
 
-      if (textColor === bgColor) continue;
-
-      const id = String(idCounter++);
-      el.setAttribute("data-chromacheck-id", id);
-
-      pairs.push({
-        id,
-        textColor,
-        bgColor,
-        selector: getMinimalSelector(el),
-        textPreview: directText.slice(0, 60),
-        tagName: el.tagName.toLowerCase(),
-        fontSize: style.fontSize,
-        fontWeight: style.fontWeight,
-      });
+      // Phase 6: Interactive Target Size (WCAG 2.2)
+      if (
+        ["button", "a", "input", "select", "textarea"].includes(
+          el.tagName.toLowerCase(),
+        )
+      ) {
+        const rect = el.getBoundingClientRect();
+        if (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          (rect.width < 24 || rect.height < 24)
+        ) {
+          const id =
+            el.getAttribute("data-chromacheck-id") || String(idCounter++);
+          el.setAttribute("data-chromacheck-id", id);
+          pairs.push({
+            id,
+            textColor: "#ff0000", // Placeholder fail colors for non-color failures
+            bgColor: "#ff0000",
+            selector: getMinimalSelector(el),
+            textPreview: `Target Size: ${Math.round(rect.width)}x${Math.round(rect.height)}px (Min 24x24px)`,
+            tagName: el.tagName.toLowerCase(),
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+            type: "target-size",
+          });
+        }
+      }
     }
+
+    // Phase 6: SVGs and Non-text Contrast
+    document
+      .querySelectorAll("svg, path, circle, rect, polygon")
+      .forEach((svgEl) => {
+        if (processed.has(svgEl)) return;
+        if (!isContentVisible(svgEl)) return;
+
+        const style = window.getComputedStyle(svgEl);
+        const fill = style.fill;
+        const stroke = style.stroke;
+
+        let targetColor = "none";
+        if (fill && fill !== "none" && fill !== "rgba(0, 0, 0, 0)")
+          targetColor = fill;
+        else if (stroke && stroke !== "none" && stroke !== "rgba(0, 0, 0, 0)")
+          targetColor = stroke;
+
+        if (targetColor === "none") return;
+
+        const rgba = parseRGBA(targetColor);
+        if (!rgba || rgba.a === 0) return;
+
+        const renderedPair = getRenderedPair(svgEl, rgba);
+        const fgHex = componentsToHex(renderedPair.text);
+        const bgHex = componentsToHex(renderedPair.background);
+
+        if (fgHex === bgHex) return;
+
+        const id = String(idCounter++);
+        svgEl.setAttribute("data-chromacheck-id", id);
+        pairs.push({
+          id,
+          textColor: fgHex,
+          bgColor: bgHex,
+          selector: getMinimalSelector(svgEl),
+          textPreview: `<${svgEl.tagName.toLowerCase()}>\u200B icon or graphic`,
+          tagName: svgEl.tagName.toLowerCase(),
+          fontSize: "24px", // Assume large for graphical objects in WCAG 2.1 mapping
+          fontWeight: "400",
+          type: "non-text",
+        });
+      });
+
+    // Phase 6: Borders and Inputs
+    document
+      .querySelectorAll(
+        "input, textarea, select, button, .border, [style*='border']",
+      )
+      .forEach((el) => {
+        if (!isContentVisible(el)) return;
+        const style = window.getComputedStyle(el);
+        // Check borders if they have width
+        const borderDirs = ["Top", "Right", "Bottom", "Left"];
+        let hasBorder = false;
+        for (const dir of borderDirs) {
+          if (
+            parseFloat(style[`border${dir}Width`]) > 0 &&
+            style[`border${dir}Style`] !== "none"
+          ) {
+            const borderRgba = parseRGBA(style[`border${dir}Color`]);
+            if (borderRgba && borderRgba.a > 0) {
+              const renderedPair = getRenderedPair(
+                el.parentElement || el,
+                borderRgba,
+              );
+              const fgHex = componentsToHex(renderedPair.text);
+              const bgHex = componentsToHex(renderedPair.background);
+              if (fgHex !== bgHex) {
+                const id =
+                  el.getAttribute("data-chromacheck-id") || String(idCounter++);
+                el.setAttribute("data-chromacheck-id", id);
+                pairs.push({
+                  id,
+                  textColor: fgHex,
+                  bgColor: bgHex,
+                  selector: getMinimalSelector(el),
+                  textPreview: `Border Contrast (${dir})`,
+                  tagName: el.tagName.toLowerCase(),
+                  fontSize: "24px", // Map graphical to large text equivalent logic
+                  fontWeight: "400",
+                  type: "non-text",
+                });
+                hasBorder = true;
+                break; // Just log one border fail per element to reduce noise
+              }
+            }
+          }
+        }
+
+        // Placeholders
+        if (
+          ["input", "textarea"].includes(el.tagName.toLowerCase()) &&
+          el.placeholder
+        ) {
+          const phStyle = window.getComputedStyle(el, "::placeholder");
+          const phRgba = parseRGBA(phStyle.color);
+          if (phRgba && phRgba.a > 0) {
+            const bgRgba = parseRGBA(style.backgroundColor);
+            const renderedPair = getRenderedPair(el, phRgba); // approximate bg
+            const fgHex = componentsToHex(renderedPair.text);
+            const bgHex = componentsToHex(renderedPair.background);
+
+            const id = String(idCounter++);
+            el.setAttribute("data-chromacheck-ph-id", id); // Different attribute to not conflict with base element
+            pairs.push({
+              id,
+              textColor: fgHex,
+              bgColor: bgHex,
+              selector: `${getMinimalSelector(el)}::placeholder`,
+              textPreview: `Placeholder text`,
+              tagName: el.tagName.toLowerCase(),
+              fontSize: phStyle.fontSize || style.fontSize,
+              fontWeight: phStyle.fontWeight || style.fontWeight,
+              type: "placeholder",
+            });
+          }
+        }
+      });
 
     return pairs;
   }
@@ -537,8 +685,35 @@
       sendResponse({ ok: true });
       return false;
     }
+    if (message.action === "simulateColorBlindness") {
+      const type = message.type; // e.g. "protanopia", or "none"
+      if (type && type !== "none") {
+        document.documentElement.style.filter = `url(#chromacheck-${type})`;
+      } else {
+        document.documentElement.style.filter = "";
+      }
+      sendResponse({ ok: true });
+      return false;
+    }
     if (message.action === "extractElementPairs") {
       sendResponse({ pairs: extractElementPairs() });
+      return false;
+    }
+    if (message.action === "previewFix") {
+      let style = document.getElementById("chromacheck-preview-fix");
+      if (!style) {
+        style = document.createElement("style");
+        style.id = "chromacheck-preview-fix";
+        document.head.appendChild(style);
+      }
+      style.textContent = `${message.selector} { ${message.prop}: ${message.val} !important; outline: 3px solid ${message.val} !important; outline-offset: 2px !important; }`;
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (message.action === "revertPreviewFix") {
+      const style = document.getElementById("chromacheck-preview-fix");
+      if (style) style.remove();
+      sendResponse({ ok: true });
       return false;
     }
     if (message.action === "highlightElement") {
@@ -547,4 +722,51 @@
     }
     return false;
   });
+
+  // Inject SVG Filters for Color Blindness Simulation
+  function initColorBlindnessFilters() {
+    if (document.getElementById("chromacheck-color-blind-filters")) return;
+
+    // Using widely accepted LMS to RGB transformation matrices for accurate CVD simulation
+    const svgStr = `
+      <svg xmlns="http://www.w3.org/2000/svg" style="display:none;" id="chromacheck-color-blind-filters">
+        <defs>
+          <filter id="chromacheck-protanopia">
+            <feColorMatrix type="matrix" values="0.567 0.433 0 0 0  0.558 0.442 0 0 0  0 0.242 0.758 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="chromacheck-protanomaly">
+            <feColorMatrix type="matrix" values="0.817 0.183 0 0 0  0.333 0.667 0 0 0  0 0.125 0.875 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="chromacheck-deuteranopia">
+            <feColorMatrix type="matrix" values="0.625 0.375 0 0 0  0.7 0.3 0 0 0  0 0.3 0.7 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="chromacheck-deuteranomaly">
+            <feColorMatrix type="matrix" values="0.8 0.2 0 0 0  0.258 0.742 0 0 0  0 0.142 0.858 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="chromacheck-tritanopia">
+            <feColorMatrix type="matrix" values="0.95 0.05 0 0 0  0 0.433 0.567 0 0  0 0.475 0.525 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="chromacheck-tritanomaly">
+            <feColorMatrix type="matrix" values="0.967 0.033 0 0 0  0 0.733 0.267 0 0  0 0.183 0.817 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="chromacheck-achromatopsia">
+            <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0" />
+          </filter>
+          <filter id="chromacheck-achromatomaly">
+            <feColorMatrix type="matrix" values="0.618 0.320 0.062 0 0  0.163 0.775 0.062 0 0  0.163 0.320 0.516 0 0  0 0 0 1 0" />
+          </filter>
+        </defs>
+      </svg>
+    `;
+    const div = document.createElement("div");
+    div.innerHTML = svgStr;
+    document.body.appendChild(div.firstElementChild);
+  }
+
+  // Initialize filters on script load
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initColorBlindnessFilters);
+  } else {
+    initColorBlindnessFilters();
+  }
 })();
