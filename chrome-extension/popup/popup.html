@@ -270,7 +270,7 @@
 
     <div
       id="settings-popover"
-      class="popover glass-panel"
+      class="popover panel-card"
       role="dialog"
       aria-modal="true"
       aria-hidden="true"
@@ -301,38 +301,19 @@
         </button>
       </div>
       <div class="popover-content">
-        <label
-          class="setting-row"
-          style="
-            margin-bottom: 12px;
-            align-items: flex-start;
-            flex-direction: column;
-            gap: 6px;
-          "
-        >
-          <div class="setting-info" style="width: 100%">
+        <label class="setting-group">
+          <div class="setting-info">
             <strong>Primary Standard</strong>
             <p>Score pairs based on this accessibility standard.</p>
           </div>
-          <select
-            id="standard-select"
-            class="cvd-select"
-            style="
-              width: 100%;
-              padding: 6px;
-              border-radius: 4px;
-              background: rgba(15, 23, 42, 0.4);
-              color: white;
-              border: 1px solid rgba(148, 163, 184, 0.2);
-            "
-          >
+          <select id="standard-select">
             <option value="WCAG21">WCAG 2.1 (Current)</option>
             <option value="WCAG22">WCAG 2.2</option>
             <option value="APCA">APCA (WCAG 3.0 Draft)</option>
           </select>
         </label>
 
-        <label class="setting-row">
+        <label class="setting-row" style="margin-bottom: 12px">
           <div class="setting-info">
             <strong>Auto-sync Results</strong>
             <p>Automatically re-scan when the page changes.</p>
@@ -340,31 +321,12 @@
           <input type="checkbox" id="auto-sync-toggle" />
         </label>
 
-        <label
-          class="setting-row"
-          style="
-            margin-top: 12px;
-            align-items: flex-start;
-            flex-direction: column;
-            gap: 6px;
-          "
-        >
-          <div class="setting-info" style="width: 100%">
+        <label class="setting-group" style="margin-bottom: 0">
+          <div class="setting-info">
             <strong>Color Vision Simulation</strong>
             <p>Apply an SVG filter to the live page.</p>
           </div>
-          <select
-            id="color-blindness-select"
-            class="cvd-select"
-            style="
-              width: 100%;
-              padding: 6px;
-              border-radius: 4px;
-              background: rgba(15, 23, 42, 0.4);
-              color: white;
-              border: 1px solid rgba(148, 163, 184, 0.2);
-            "
-          >
+          <select id="color-blindness-select">
             <option value="none">Normal Vision</option>
             <option value="protanopia">Protanopia (Red-blind)</option>
             <option value="protanomaly">Protanomaly (Red-weak)</option>

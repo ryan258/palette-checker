@@ -935,6 +935,33 @@ body::-webkit-scrollbar-thumb {
   cursor: pointer;
 }
 
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.setting-group .setting-info {
+  width: 100%;
+}
+
+.setting-group select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.4);
+  color: white;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  cursor: pointer;
+  appearance: auto;
+}
+
+.setting-group select:focus {
+  outline: 2px solid rgba(56, 189, 248, 0.5);
+  border-color: rgba(56, 189, 248, 0.8);
+}
+
 .setting-info {
   flex: 1;
 }
