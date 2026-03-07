@@ -439,35 +439,6 @@
           });
         }
       }
-
-      // Phase 6: Interactive Target Size (WCAG 2.2)
-      if (
-        ["button", "a", "input", "select", "textarea"].includes(
-          el.tagName.toLowerCase(),
-        )
-      ) {
-        const rect = el.getBoundingClientRect();
-        if (
-          rect.width > 0 &&
-          rect.height > 0 &&
-          (rect.width < 24 || rect.height < 24)
-        ) {
-          const id =
-            el.getAttribute(TRACKED_ID_ATTR) || String(idCounter++);
-          trackElement(id, el);
-          pairs.push({
-            id,
-            textColor: "#ff0000", // Placeholder fail colors for non-color failures
-            bgColor: "#ff0000",
-            selector: getMinimalSelector(el),
-            textPreview: `Target Size: ${Math.round(rect.width)}x${Math.round(rect.height)}px (Min 24x24px)`,
-            tagName: el.tagName.toLowerCase(),
-            fontSize: style.fontSize,
-            fontWeight: style.fontWeight,
-            type: "target-size",
-          });
-        }
-      }
     }
 
     // Phase 6: Link Distinguishability (WCAG 1.4.1)
@@ -521,11 +492,7 @@
       if (fill && fill !== "none" && fill !== "rgba(0, 0, 0, 0)") {
         targetColor = fill;
         foregroundProperty = "fill";
-      } else if (
-        stroke &&
-        stroke !== "none" &&
-        stroke !== "rgba(0, 0, 0, 0)"
-      ) {
+      } else if (stroke && stroke !== "none" && stroke !== "rgba(0, 0, 0, 0)") {
         targetColor = stroke;
         foregroundProperty = "stroke";
       }
@@ -635,6 +602,37 @@
             type: "placeholder",
           });
         }
+      }
+    });
+
+    // Phase 6: Interactive Target Size (WCAG 2.2)
+    queryAllDeep(
+      "button, a, input, select, textarea, [role='button'], [role='link']",
+    ).forEach((el) => {
+      if (!isContentVisible(el)) return;
+
+      const rect = el.getBoundingClientRect();
+      if (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        (rect.width < 24 || rect.height < 24)
+      ) {
+        const id = el.getAttribute(TRACKED_ID_ATTR) || String(idCounter++);
+        trackElement(id, el);
+
+        const style = window.getComputedStyle(el);
+
+        pairs.push({
+          id,
+          textColor: "#ff0000", // Placeholder fail colors for non-color failures
+          bgColor: "#ff0000",
+          selector: getMinimalSelector(el),
+          textPreview: `Target Size: ${Math.round(rect.width)}x${Math.round(rect.height)}px (Min 24x24px)`,
+          tagName: el.tagName.toLowerCase(),
+          fontSize: style.fontSize,
+          fontWeight: style.fontWeight,
+          type: "target-size",
+        });
       }
     });
 

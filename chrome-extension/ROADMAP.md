@@ -99,10 +99,10 @@ Every other tool bolts APCA on as a secondary score next to WCAG 2.1. ChromaChec
 
 WCAG 1.4.11 (Non-text Contrast) requires 3:1 for UI components and graphical objects. No browser extension handles this well.
 
-- [ ] **UI Component Contrast** - Detect buttons, inputs, checkboxes, and other form controls. Check their border/outline contrast against their background. Flag inputs that disappear into their container.
+- [x] **UI Component Contrast** - Detect buttons, inputs, checkboxes, and other form controls. Check their border/outline contrast against their background. Flag inputs that disappear into their container.
 - [ ] **Focus Indicator Audit** - Tab through the page programmatically. Capture the focus style of each interactive element. Check the focus indicator's contrast against both the element and its surrounding background.
 - [x] **Icon & SVG Contrast** - Detect inline SVGs and icon fonts. Measure their fill/stroke color against the background. Flag icons that rely solely on color to convey meaning.
-- [ ] **Link Distinguishability** - WCAG 1.4.1 requires links within text to be distinguishable by more than color alone (or have 3:1 contrast with surrounding text). Detect links inside paragraphs, check if they have underlines or sufficient contrast against body text.
+- [x] **Link Distinguishability** - WCAG 1.4.1 requires links within text to be distinguishable by more than color alone (or have 3:1 contrast with surrounding text). Detect links inside paragraphs, check if they have underlines or sufficient contrast against body text.
 - [x] **Placeholder Text Contrast** - Check `::placeholder` contrast against input backgrounds. This is one of the most commonly failed checks on the web.
 - [x] **Target Size Checking (WCAG 2.2)** - Measure interactive element dimensions against the new SC 2.5.8 requirement (24x24 CSS pixels minimum). Flag undersized buttons, links, and controls. This is WCAG 2.2's most automatable new success criterion and almost no tool checks it yet.
 - [ ] **Dark Mode & Theme-Aware Testing** - Detect `prefers-color-scheme` media queries and CSS custom property theming. Toggle between light/dark/high-contrast modes and re-run the full analysis for each. "Your palette passes AA in light mode but has 6 failures in dark mode." Test `forced-colors` mode for Windows High Contrast users.
