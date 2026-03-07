@@ -212,9 +212,28 @@
           </div>
           <div class="filter-tools">
             <span id="issues-count" class="count-indicator"></span>
+            <div class="batch-tools">
+              <span id="batch-count" class="count-indicator"></span>
+              <div class="batch-actions">
+                <button type="button" id="batch-copy-btn" class="btn-xs">
+                  Copy CSS Patch
+                </button>
+                <button type="button" id="batch-clear-btn" class="btn-xs">
+                  Clear
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         <div id="issues-list" class="issues-list"></div>
+      </section>
+
+      <section id="diff-section" class="panel-card" style="display: none">
+        <div class="section-header">
+          <h2>Scan Delta</h2>
+          <span id="diff-meta" class="count-indicator"></span>
+        </div>
+        <p id="diff-summary" class="diff-summary"></p>
       </section>
 
       <section id="history-section" class="panel-card" style="display: none">

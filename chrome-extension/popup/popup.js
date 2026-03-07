@@ -96,6 +96,8 @@ const state = {
     githubRepoUrl: "",
   },
   pinnedItems: [],
+  scanDiff: null,
+  selectedIssueKeys: [],
   isExtracting: false,
 };
 
@@ -129,6 +131,12 @@ const filterLegend = document.getElementById("filter-legend");
 const issuesSection = document.getElementById("issues-section");
 const issuesList = document.getElementById("issues-list");
 const issuesCount = document.getElementById("issues-count");
+const batchCount = document.getElementById("batch-count");
+const batchCopyBtn = document.getElementById("batch-copy-btn");
+const batchClearBtn = document.getElementById("batch-clear-btn");
+const diffSection = document.getElementById("diff-section");
+const diffSummary = document.getElementById("diff-summary");
+const diffMeta = document.getElementById("diff-meta");
 const emptyState = document.getElementById("empty-state");
 
 // Settings Elements
@@ -250,6 +258,236 @@ function getScoreTone(level) {
   return level === "Fail" ? "fail" : "pass";
 }
 
+function getIssueStableKey(issue) {
+  return (
+    issue?.key ||
+    [issue?.type || "text", issue?.selector || "", issue?.foregroundProperty || "color"].join("|")
+  );
+}
+
+function normalizeSavedScan(scan) {
+  if (!scan) {
+    return {
+      title: "",
+      palette: [],
+      extractedAt: null,
+      issues: [],
+    };
+  }
+
+  return {
+    title: scan.title || "",
+    palette: Array.isArray(scan.palette) ? scan.palette : [],
+    extractedAt: scan.extractedAt || null,
+    issues: Array.isArray(scan.issues) ? scan.issues : [],
+  };
+}
+
+function getIssueTargetRatio(issue) {
+  if (!issue) return 4.5;
+  if (issue.type === "non-text" || issue.type === "link-contrast") return 3;
+
+  const size = parseFloat(issue.fontSize) || 16;
+  const weight = parseInt(issue.fontWeight, 10) || 400;
+  if (size >= 24 || (size >= 18.66 && weight >= 700)) return 3;
+
+  return 4.5;
+}
+
+function getIssueExplanation(issue) {
+  switch (issue.type) {
+    case "target-size":
+      return "Small targets force extra precision, which slows down people using touch, switch access, or screen magnification.";
+    case "link-contrast":
+      return "Links that differ from surrounding text by color alone are easy to miss for people with color-vision differences or low contrast sensitivity.";
+    case "placeholder":
+      return "Low-contrast placeholder text disappears quickly under glare, fatigue, and low vision, which makes forms harder to understand.";
+    case "non-text":
+      return "UI graphics and control outlines still need clear contrast so people can recognize controls and icons without guessing.";
+    default:
+      return "Low text contrast increases reading effort, especially for people with low vision, cognitive fatigue, or washed-out displays.";
+  }
+}
+
+function buildCssFixRule(option) {
+  return `/* ChromaCheck fix: contrast ${formatContrastRatio(option.beforeRatio)} -> ${formatContrastRatio(option.afterRatio)} */\n${option.selector} { ${option.property}: ${option.suggestion}; }`;
+}
+
+function getIssueFixOptions(issue) {
+  if (!issue || issue.type === "target-size" || issue.type === "link-contrast") {
+    return null;
+  }
+
+  const targetRatio = getIssueTargetRatio(issue);
+  const suggestions = getSuggestedFixes(
+    issue.textColor,
+    issue.bgColor,
+    targetRatio,
+  );
+  const foregroundProperty = issue.foregroundProperty || "color";
+  const baseSelector = issue.selector.replace(/::placeholder$/, "");
+
+  const decorateOption = (option, selector, property) => {
+    if (!option) return null;
+
+    const nextOption = {
+      ...option,
+      selector,
+      property,
+    };
+
+    return {
+      ...nextOption,
+      rule: buildCssFixRule(nextOption),
+    };
+  };
+
+  const textOption = decorateOption(
+    suggestions.text,
+    issue.selector,
+    foregroundProperty,
+  );
+  const backgroundOption = decorateOption(
+    suggestions.background,
+    baseSelector,
+    "background-color",
+  );
+
+  const recommended =
+    suggestions.recommended?.property === "background-color"
+      ? backgroundOption
+      : textOption;
+
+  return {
+    text: textOption,
+    background: backgroundOption,
+    recommended,
+    targetRatio,
+  };
+}
+
+function summarizeIssuesForStorage(issues) {
+  return issues.map((issue) => ({
+    id: issue.id,
+    key: getIssueStableKey(issue),
+    selector: issue.selector,
+    type: issue.type,
+    tagName: issue.tagName,
+    fontSize: issue.fontSize,
+    fontWeight: issue.fontWeight,
+    textPreview: issue.textPreview,
+    foregroundProperty: issue.foregroundProperty || "color",
+    wcagLevel: issue.wcagLevel,
+    apcaLevel: issue.apcaLevel,
+    wcagRatio: issue.wcagRatio,
+    apcaScore: issue.apcaScore,
+    textColor: issue.textColor,
+    bgColor: issue.bgColor,
+    textColorToken: issue.textColorToken,
+    bgColorToken: issue.bgColorToken,
+  }));
+}
+
+function computeScanDiff(previousScan, currentIssues) {
+  if (!previousScan?.issues?.length) {
+    return null;
+  }
+
+  const previousByKey = new Map(
+    previousScan.issues.map((issue) => [issue.key, issue]),
+  );
+  const currentByKey = new Map(
+    currentIssues.map((issue) => [issue.key || getIssueStableKey(issue), issue]),
+  );
+
+  let newIssues = 0;
+  let resolvedIssues = 0;
+  let changedIssues = 0;
+
+  currentByKey.forEach((issue, key) => {
+    const previous = previousByKey.get(key);
+    if (!previous) {
+      newIssues += 1;
+      return;
+    }
+
+    if (
+      previous.wcagLevel !== issue.wcagLevel ||
+      previous.apcaLevel !== issue.apcaLevel
+    ) {
+      changedIssues += 1;
+    }
+  });
+
+  previousByKey.forEach((_issue, key) => {
+    if (!currentByKey.has(key)) {
+      resolvedIssues += 1;
+    }
+  });
+
+  return {
+    newIssues,
+    resolvedIssues,
+    changedIssues,
+    previousCount: previousByKey.size,
+    currentCount: currentByKey.size,
+  };
+}
+
+function getPinnedCurrentState(item) {
+  if (item.type === "combo") {
+    const combo = state.combinations.find(
+      (entry) => entry.textHex === item.fg && entry.bgHex === item.bg,
+    );
+    if (!combo) return null;
+    return {
+      wcagLevel: combo.wcagLevel,
+      apcaLevel: combo.apcaLevel,
+      wcagRatio: combo.wcagRatio,
+      apcaScore: combo.apcaScore,
+    };
+  }
+
+  const issue = state.issues.find(
+    (entry) => getIssueStableKey(entry) === item.key,
+  );
+  if (!issue) return null;
+
+  return {
+    wcagLevel: issue.wcagLevel,
+    apcaLevel: issue.apcaLevel,
+    wcagRatio: issue.wcagRatio,
+    apcaScore: issue.apcaScore,
+  };
+}
+
+function getPinnedStatusAlert(item) {
+  const current = getPinnedCurrentState(item);
+  const standard = state.settings.standard;
+  const levelKey = standard === "APCA" ? "apcaLevel" : "wcagLevel";
+  const scoreKey = standard === "APCA" ? "apcaScore" : "wcagRatio";
+  const previousLevel = item[levelKey] || item.level;
+
+  if (!current) {
+    return "No longer failing in the latest scan.";
+  }
+
+  if (current[levelKey] !== previousLevel) {
+    const formatter =
+      standard === "APCA" ? formatAPCAScore : formatContrastRatio;
+    return `${previousLevel} -> ${current[levelKey]} (${formatter(item[scoreKey] || 0)} -> ${formatter(current[scoreKey] || 0)})`;
+  }
+
+  return null;
+}
+
+function syncSelectedIssueKeys() {
+  const availableKeys = new Set(state.issues.map((issue) => getIssueStableKey(issue)));
+  state.selectedIssueKeys = state.selectedIssueKeys.filter((key) =>
+    availableKeys.has(key),
+  );
+}
+
 function buildCombinationsData(colors) {
   const uniqueColors = [...new Set(colors)];
   const combinations = [];
@@ -366,6 +604,7 @@ function render() {
   renderPageContext();
   renderMetrics();
   renderIssues();
+  renderScanDiff();
   renderPalette();
   renderCombinations();
   renderPinned();
@@ -379,6 +618,8 @@ function clearAnalysis() {
   state.combinations = [];
   state.elementPairs = [];
   state.issues = [];
+  state.scanDiff = null;
+  state.selectedIssueKeys = [];
   state.analysisMeta.extractedAt = null;
 }
 
@@ -404,7 +645,7 @@ async function writeAnalysisMap(analyses) {
   await storageSet({ [ANALYSIS_BY_URL_KEY]: analyses });
 }
 
-async function saveAnalysisForCurrentPage(palette, extractedAt) {
+async function saveAnalysisForCurrentPage(scanOrPalette, extractedAt) {
   if (!state.pageContext.url) return;
 
   const nextAnalyses = await readAnalysisMap();
@@ -414,12 +655,28 @@ async function saveAnalysisForCurrentPage(palette, extractedAt) {
     pageHistory = pageHistory.palette ? [pageHistory] : [];
   }
 
+  const previousLatest = pageHistory.length
+    ? normalizeSavedScan(pageHistory[0])
+    : null;
+
+  const nextScan = Array.isArray(scanOrPalette)
+    ? {
+        title: state.pageContext.title,
+        palette: scanOrPalette,
+        extractedAt,
+        issues: [],
+      }
+    : {
+        title: scanOrPalette?.title || state.pageContext.title,
+        palette: Array.isArray(scanOrPalette?.palette)
+          ? scanOrPalette.palette
+          : [],
+        extractedAt: scanOrPalette?.extractedAt || extractedAt || Date.now(),
+        issues: Array.isArray(scanOrPalette?.issues) ? scanOrPalette.issues : [],
+      };
+
   // Add new scan at the top
-  pageHistory.unshift({
-    title: state.pageContext.title,
-    palette,
-    extractedAt,
-  });
+  pageHistory.unshift(nextScan);
 
   // Limit per-page history
   nextAnalyses[state.pageContext.url] = pageHistory.slice(
@@ -441,6 +698,7 @@ async function saveAnalysisForCurrentPage(palette, extractedAt) {
     .slice(0, MAX_SAVED_ANALYSES);
 
   await writeAnalysisMap(Object.fromEntries(trimmedEntries));
+  return previousLatest;
 }
 
 async function loadSavedAnalysis(url) {
@@ -448,9 +706,9 @@ async function loadSavedAnalysis(url) {
   const analyses = await readAnalysisMap();
   const history = analyses[url] || [];
   if (Array.isArray(history)) {
-    return history[0] || null;
+    return history[0] ? normalizeSavedScan(history[0]) : null;
   }
-  return history;
+  return normalizeSavedScan(history);
 }
 
 async function refreshHistory() {
@@ -460,6 +718,7 @@ async function refreshHistory() {
   historyList.innerHTML = "";
 
   if (!activeUrl) {
+    state.scanDiff = null;
     historySection.style.display = "none";
     historyCount.textContent = "";
     return;
@@ -473,8 +732,23 @@ async function refreshHistory() {
     return;
   }
 
-  const history = analyses[activeUrl] || [];
-  if (!Array.isArray(history) || history.length <= 1) {
+  const rawHistory = analyses[activeUrl] || [];
+  const history = Array.isArray(rawHistory)
+    ? rawHistory.map(normalizeSavedScan)
+    : [normalizeSavedScan(rawHistory)];
+  const activeIndex = history.findIndex(
+    (scan) => scan.extractedAt === activeExtractedAt,
+  );
+  const currentScan = history[activeIndex >= 0 ? activeIndex : 0] || null;
+  const previousScan =
+    activeIndex >= 0 ? history[activeIndex + 1] || null : history[1] || null;
+  state.scanDiff =
+    currentScan && previousScan
+      ? computeScanDiff(previousScan, currentScan.issues)
+      : null;
+
+  if (history.length <= 1) {
+    state.scanDiff = null;
     historySection.style.display = "none";
     historyCount.textContent = "";
     return;
@@ -489,7 +763,7 @@ async function refreshHistory() {
     row.innerHTML = `
       <div class="history-info">
         <span class="history-time">${formatScanTimestamp(scan.extractedAt)}</span>
-        <span class="history-detail">${scan.palette.length} colors found</span>
+        <span class="history-detail">${scan.palette.length} colors · ${scan.issues.length} issues</span>
       </div>
       <button type="button" class="btn-icon btn-history-load" data-index="${index}" title="Load this scan">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -504,7 +778,21 @@ async function refreshHistory() {
 
 async function loadPinnedItems() {
   const result = await chrome.storage.local.get([PINNED_ITEMS_KEY]);
-  state.pinnedItems = result[PINNED_ITEMS_KEY] || [];
+  state.pinnedItems = (result[PINNED_ITEMS_KEY] || []).map((item) => {
+    const normalizedKey =
+      item.key ||
+      (item.type === "combo"
+        ? `combo:${item.fg}:${item.bg}`
+        : getIssueStableKey(item));
+    return {
+      ...item,
+      key: item.type === "combo" ? normalizedKey : item.key || normalizedKey,
+      id: item.id || normalizedKey,
+      wcagLevel: item.wcagLevel || item.level,
+      wcagRatio: parseFloat(item.wcagRatio || item.ratio || 0),
+      apcaScore: parseFloat(item.apcaScore || 0),
+    };
+  });
 }
 
 async function savePinnedItems() {
@@ -512,16 +800,21 @@ async function savePinnedItems() {
 }
 
 function togglePin(item) {
-  const id = item.id || `${item.fg}-${item.bg}`;
-  const index = state.pinnedItems.findIndex(
-    (p) => (p.id || `${p.fg}-${p.bg}`) === id,
-  );
+  const id =
+    item.id ||
+    item.key ||
+    (item.type === "combo" ? `combo:${item.fg}:${item.bg}` : getIssueStableKey(item));
+  const index = state.pinnedItems.findIndex((p) => p.id === id);
 
   if (index > -1) {
     state.pinnedItems.splice(index, 1);
   } else {
     state.pinnedItems.push({
       ...item,
+      key:
+        item.type === "combo"
+          ? id
+          : item.key || getIssueStableKey(item),
       pinnedAt: Date.now(),
       id,
     });
@@ -533,6 +826,7 @@ function togglePin(item) {
 function renderPinned() {
   if (!state.pinnedItems.length) {
     pinnedSection.style.display = "none";
+    pinnedCount.textContent = "";
     return;
   }
 
@@ -541,28 +835,41 @@ function renderPinned() {
   pinnedList.innerHTML = "";
 
   state.pinnedItems.forEach((item) => {
+    const alert = getPinnedStatusAlert(item);
     const row = document.createElement("div");
     row.className = "pinned-row combo-row";
     row.innerHTML = `
-      <div class="combo-preview-mini" style="background:${item.bg}; color:${item.fg}">
-        Abc
-      </div>
-      <div class="combo-info">
-        <div class="combo-colors-label">${item.fg} on ${item.bg}</div>
-        <div class="combo-scores">
-          <div class="score-group">
-            <span class="score-label">Ratio</span>
-            <span class="score-value ${getScoreTone(item.level)}">${item.ratio.toFixed(2)}</span>
-          </div>
-          <span class="status-badge ${getStatusBadgeClass(item.level)}">${item.level}</span>
+      <div class="issue-row-main">
+        <div class="combo-preview-mini" style="background:${item.bg}; color:${item.fg}">
+          Abc
         </div>
+        <div class="combo-info">
+          <div class="combo-colors-label">${item.selector || `${item.fg} on ${item.bg}`}</div>
+          <div class="combo-scores">
+            <div class="score-group">
+              <span class="score-label">Ratio</span>
+              <span class="score-value ${getScoreTone(item.wcagLevel || item.level)}">${(item.wcagRatio || item.ratio || 0).toFixed(2)}</span>
+            </div>
+            <span class="status-badge ${getStatusBadgeClass(item.wcagLevel || item.level)}">${item.wcagLevel || item.level}</span>
+            ${
+              item.apcaLevel
+                ? `<div class="score-group"><span class="score-label">APCA</span><span class="score-value ${getScoreTone(item.apcaLevel)}">${formatAPCAScore(item.apcaScore || 0)}</span></div>`
+                : ""
+            }
+          </div>
+          ${
+            alert
+              ? `<div class="pinned-row-alert">${escapeHtml(alert)}</div>`
+              : ""
+          }
+        </div>
+        <button type="button" class="btn-icon btn-unpin" title="Unpin">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 14l-7 7-7-7"></path>
+            <path d="M12 21V3"></path>
+          </svg>
+        </button>
       </div>
-      <button type="button" class="btn-icon btn-unpin" title="Unpin">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M19 14l-7 7-7-7"></path>
-          <path d="M12 21V3"></path>
-        </svg>
-      </button>
     `;
     const unpinButton = row.querySelector(".btn-unpin");
     if (unpinButton) {
@@ -570,6 +877,19 @@ function renderPinned() {
     }
     pinnedList.appendChild(row);
   });
+}
+
+function renderScanDiff() {
+  if (!state.scanDiff) {
+    diffSection.style.display = "none";
+    diffSummary.textContent = "";
+    diffMeta.textContent = "";
+    return;
+  }
+
+  diffSection.style.display = "block";
+  diffMeta.textContent = `${state.scanDiff.currentCount} current issues`;
+  diffSummary.textContent = `${state.scanDiff.newIssues} new issues, ${state.scanDiff.resolvedIssues} resolved, ${state.scanDiff.changedIssues} changed status since the previous scan.`;
 }
 
 function renderStatusBanner(message, tone = "info") {
@@ -688,6 +1008,7 @@ function renderPickedResult(pickerResultOrFg, fallbackBg) {
     fontSize || "16px",
     fontWeight || "400",
   );
+  const apcaDetails = getAPCARecommendationDetails(apcaScore);
 
   pickedSection.style.display = "";
   pickedResult.innerHTML = `
@@ -724,6 +1045,10 @@ function renderPickedResult(pickerResultOrFg, fallbackBg) {
           <span class="score-value ${getScoreTone(apcaLevel)}">${formatAPCAScore(apcaScore)}</span>
           <span class="status-badge ${getStatusBadgeClass(apcaLevel)}">${apcaLevel}</span>
         </div>
+      </div>
+      <div class="issue-explainer">
+        <span class="issue-polarity">${escapeHtml(apcaDetails.polarity.label)}</span>
+        ${escapeHtml(apcaDetails.minimumText)}
       </div>
     </div>
   `;
@@ -789,6 +1114,7 @@ function renderCombinations() {
     row.className = "combo-row";
     row.dataset.wcagLevel = entry.wcagLevel;
     row.dataset.apcaLevel = entry.apcaLevel;
+    const apcaDetails = getAPCARecommendationDetails(entry.apcaScore);
 
     const isPinned = state.pinnedItems.some(
       (p) =>
@@ -811,9 +1137,12 @@ function renderCombinations() {
             <span class="status-badge ${getStatusBadgeClass(entry.apcaLevel)}">${entry.apcaLevel}</span>
           </div>
         </div>
+        <div class="issue-meta">
+          <span class="issue-polarity">${escapeHtml(apcaDetails.polarity.label)}</span>
+        </div>
       </div>
       <button type="button" class="btn-icon btn-pin ${isPinned ? "active" : ""}"
-        data-fg="${entry.textHex}" data-bg="${entry.bgHex}" data-ratio="${entry.wcagRatio}" data-level="${entry.wcagLevel}" title="${isPinned ? "Unpin result" : "Pin result"}">
+        data-fg="${entry.textHex}" data-bg="${entry.bgHex}" data-ratio="${entry.wcagRatio}" data-level="${entry.wcagLevel}" data-wcag-level="${entry.wcagLevel}" data-apca-level="${entry.apcaLevel}" data-apca-score="${entry.apcaScore}" title="${isPinned ? "Unpin result" : "Pin result"}">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
         </svg>
@@ -867,7 +1196,14 @@ function buildIssuesData(pairs) {
         apcaLevel = Math.abs(apcaScore) >= 45 ? "AA Large" : "Fail";
       }
 
-      return { ...pair, wcagRatio, wcagLevel, apcaScore, apcaLevel };
+      return {
+        ...pair,
+        key: getIssueStableKey(pair),
+        wcagRatio,
+        wcagLevel,
+        apcaScore,
+        apcaLevel,
+      };
     })
     .sort((a, b) => {
       if (state.settings.standard === "APCA") {
@@ -904,23 +1240,37 @@ function renderIssues() {
   if (state.issues.length === 0) {
     issuesSection.style.display = "none";
     issuesCount.textContent = "";
+    batchCount.textContent = "";
+    batchCopyBtn.disabled = true;
+    batchClearBtn.disabled = true;
     updateEmptyStateVisibility();
     return;
   }
 
+  syncSelectedIssueKeys();
   issuesSection.style.display = "";
   const summary = getIssueSummary();
   const problemCount = summary.fails + summary.warnings;
   issuesCount.textContent = problemCount
     ? `${problemCount} failing of ${summary.total} elements`
     : `${summary.total} elements — all passing`;
+  batchCount.textContent = state.selectedIssueKeys.length
+    ? `${state.selectedIssueKeys.length} queued`
+    : "";
+  batchCopyBtn.disabled = state.selectedIssueKeys.length === 0;
+  batchClearBtn.disabled = state.selectedIssueKeys.length === 0;
 
   const fragment = document.createDocumentFragment();
 
   state.issues.forEach((issue) => {
+    const issueKey = getIssueStableKey(issue);
+    const fixOptions = getIssueFixOptions(issue);
+    const apcaDetails = getAPCARecommendationDetails(issue.apcaScore);
+    const isSelected = state.selectedIssueKeys.includes(issueKey);
     const row = document.createElement("article");
     row.className = "issue-row";
     row.dataset.issueId = issue.id;
+    row.dataset.issueKey = issueKey;
     row.setAttribute("role", "button");
     row.setAttribute("tabindex", "0");
     row.setAttribute(
@@ -929,48 +1279,57 @@ function renderIssues() {
     );
 
     const isPinned = state.pinnedItems.some(
-      (p) => p.type === "issue" && p.id === issue.id,
+      (p) => p.type === "issue" && p.key === issueKey,
     );
 
     row.innerHTML = `
-      <div class="combo-preview-mini" style="background:${issue.bgColor};color:${issue.textColor};">
-        ${
-          issue.type === "target-size"
-            ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>'
-            : issue.type === "link-contrast"
-              ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>'
-              : issue.type === "non-text"
-                ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
-                : "Aa"
-        }
-      </div>
-      <div class="issue-info">
-        <code class="issue-selector">${escapeHtml(issue.selector)}</code>
-        <div class="issue-meta">
-          <span class="issue-tag">${escapeHtml(issue.tagName)}</span>
-          ${issue.type === "text" || issue.type === "placeholder" ? `<span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>` : ""}
-          <span class="issue-text-preview">${escapeHtml(issue.textPreview)}</span>
-          ${issue.textColorToken ? `<span class="issue-token" title="Foreground: ${issue.textColor}">${escapeHtml(issue.textColorToken)}</span>` : ""}
-          ${issue.bgColorToken ? `<span class="issue-token" title="Background: ${issue.bgColor}">${escapeHtml(issue.bgColorToken)}</span>` : ""}
+      <div class="issue-row-main">
+        <div class="combo-preview-mini" style="background:${issue.bgColor};color:${issue.textColor};">
+          ${
+            issue.type === "target-size"
+              ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>'
+              : issue.type === "link-contrast"
+                ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>'
+                : issue.type === "non-text"
+                  ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
+                  : "Aa"
+          }
         </div>
-        <div class="combo-scores">
-          <div class="score-group ${state.settings.standard === "APCA" ? "inactive-standard" : "active-standard"}">
-            <span class="score-label">WCAG</span>
-            <span class="score-value ${getScoreTone(issue.wcagLevel)}">${formatContrastRatio(issue.wcagRatio)}</span>
-            <span class="status-badge ${getStatusBadgeClass(issue.wcagLevel)}">${issue.wcagLevel}</span>
+        <div class="issue-info">
+          <code class="issue-selector">${escapeHtml(issue.selector)}</code>
+          <div class="issue-meta">
+            <span class="issue-tag">${escapeHtml(issue.tagName)}</span>
+            ${issue.type === "text" || issue.type === "placeholder" ? `<span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>` : ""}
+            <span class="issue-polarity">${escapeHtml(apcaDetails.polarity.label)}</span>
+            <span class="issue-text-preview">${escapeHtml(issue.textPreview)}</span>
+            ${issue.textColorToken ? `<span class="issue-token" title="Foreground: ${issue.textColor}">${escapeHtml(issue.textColorToken)}</span>` : ""}
+            ${issue.bgColorToken ? `<span class="issue-token" title="Background: ${issue.bgColor}">${escapeHtml(issue.bgColorToken)}</span>` : ""}
           </div>
-          <div class="score-group ${state.settings.standard === "APCA" ? "active-standard" : "inactive-standard"}">
-            <span class="score-label">APCA</span>
-            <span class="score-value ${getScoreTone(issue.apcaLevel)}">${formatAPCAScore(issue.apcaScore)}</span>
-            <span class="status-badge ${getStatusBadgeClass(issue.apcaLevel)}">${issue.apcaLevel}</span>
+          <div class="combo-scores">
+            <div class="score-group ${state.settings.standard === "APCA" ? "inactive-standard" : "active-standard"}">
+              <span class="score-label">WCAG</span>
+              <span class="score-value ${getScoreTone(issue.wcagLevel)}">${formatContrastRatio(issue.wcagRatio)}</span>
+              <span class="status-badge ${getStatusBadgeClass(issue.wcagLevel)}">${issue.wcagLevel}</span>
+            </div>
+            <div class="score-group ${state.settings.standard === "APCA" ? "active-standard" : "inactive-standard"}">
+              <span class="score-label">APCA</span>
+              <span class="score-value ${getScoreTone(issue.apcaLevel)}">${formatAPCAScore(issue.apcaScore)}</span>
+              <span class="status-badge ${getStatusBadgeClass(issue.apcaLevel)}">${issue.apcaLevel}</span>
+            </div>
           </div>
+          <div class="issue-explainer">${escapeHtml(getIssueExplanation(issue))}</div>
+        </div>
+        <div class="issue-actions">
+          <button type="button" class="btn-xs btn-select-issue ${isSelected ? "active" : ""}" data-key="${escapeHtml(issueKey)}" ${fixOptions?.recommended ? "" : "disabled"}>
+            ${isSelected ? "Queued" : "Batch"}
+          </button>
+          <button type="button" class="btn-icon btn-pin ${isPinned ? "active" : ""}" title="${isPinned ? "Unpin result" : "Pin result"}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+            </svg>
+          </button>
         </div>
       </div>
-      <button type="button" class="btn-icon btn-pin ${isPinned ? "active" : ""}" title="${isPinned ? "Unpin result" : "Pin result"}">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
-        </svg>
-      </button>
     `;
 
     const isFail =
@@ -978,59 +1337,45 @@ function renderIssues() {
         ? issue.apcaLevel === "Fail"
         : issue.wcagLevel === "Fail" || issue.wcagLevel === "AA Large";
 
-    if (
-      isFail &&
-      issue.type !== "target-size" &&
-      issue.type !== "link-contrast"
-    ) {
-      const suggestedFg = suggestPassingColor(issue.textColor, issue.bgColor);
-      const suggestedBg = suggestPassingColor(issue.bgColor, issue.textColor);
-      const foregroundSelector = issue.selector;
-      const backgroundSelector = issue.selector.replace(/::placeholder$/, "");
-      const foregroundProperty = issue.foregroundProperty || "color";
-      const apcaReq =
-        issue.type === "text" || issue.type === "placeholder"
-          ? getAPCAMinimumRequirements(issue.apcaScore)
-          : null;
+    if (isFail && fixOptions) {
+      const optionsHtml = [fixOptions.text, fixOptions.background]
+        .filter(Boolean)
+        .map((option) => {
+          const label =
+            option.property === (issue.foregroundProperty || "color")
+              ? "Change foreground"
+              : "Change background";
+          const recommendation =
+            fixOptions.recommended?.property === option.property
+              ? " Recommended"
+              : "";
+          return `
+            <div class="fix-option">
+              <div>
+                <div class="fix-desc">${label} to <strong>${option.suggestion.toUpperCase()}</strong>${recommendation}</div>
+                <div class="fix-meta">${formatContrastRatio(option.beforeRatio)} -> ${formatContrastRatio(option.afterRatio)}</div>
+              </div>
+              <div class="fix-actions">
+                <button type="button" class="btn-xs btn-preview-fix" data-id="${issue.id}" data-selector="${escapeHtml(option.selector)}" data-prop="${escapeHtml(option.property)}" data-val="${option.suggestion}">Preview</button>
+                <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(option.rule)}">Copy CSS</button>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
 
+      const githubFixLines = [fixOptions.text, fixOptions.background]
+        .filter(Boolean)
+        .map((option) => `- \`${option.selector} { ${option.property}: ${option.suggestion}; }\``)
+        .join("\n");
       const fixHtml = `
         <div class="issue-fix-suggestion">
           <div class="fix-header">Actionable Fixes</div>
           <div class="fix-options">
-            ${
-              suggestedFg
-                ? `
-              <div class="fix-option">
-                <span class="fix-desc">Change foreground to <strong>${suggestedFg.toUpperCase()}</strong></span>
-                <div class="fix-actions">
-                  <button type="button" class="btn-xs btn-preview-fix" data-id="${issue.id}" data-selector="${escapeHtml(foregroundSelector)}" data-prop="${escapeHtml(foregroundProperty)}" data-val="${suggestedFg}">Preview</button>
-                  <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(foregroundSelector)} { ${escapeHtml(foregroundProperty)}: ${suggestedFg}; }">Copy CSS</button>
-                </div>
-              </div>
-            `
-                : ""
-            }
-            ${
-              suggestedBg
-                ? `
-              <div class="fix-option">
-                <span class="fix-desc">Change background to <strong>${suggestedBg.toUpperCase()}</strong></span>
-                <div class="fix-actions">
-                  <button type="button" class="btn-xs btn-preview-fix" data-id="${issue.id}" data-selector="${escapeHtml(backgroundSelector)}" data-prop="background-color" data-val="${suggestedBg}">Preview</button>
-                  <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(backgroundSelector)} { background-color: ${suggestedBg}; }">Copy CSS</button>
-                </div>
-              </div>
-            `
-                : ""
-            }
-            ${
-              apcaReq
-                ? `
+            ${optionsHtml}
             <div class="fix-option fix-option-apca">
-              <span class="fix-desc">APCA Font Requirement: <strong>${apcaReq}</strong></span>
-            </div>`
-                : ""
-            }
+              <span class="fix-desc">APCA ${escapeHtml(apcaDetails.tier)} guidance: <strong>${escapeHtml(apcaDetails.minimumText)}</strong></span>
+            </div>
           </div>
           ${
             state.settings.githubRepoUrl
@@ -1043,8 +1388,8 @@ function renderIssues() {
               `[a11y] Contrast failure on ${issue.tagName} element`,
             )}&body=${encodeURIComponent(
               `**WCAG Score:** ${formatContrastRatio(issue.wcagRatio)} (${issue.wcagLevel})\n**APCA Score:** ${formatAPCAScore(issue.apcaScore)} (${issue.apcaLevel})\n**Selector:** \`${issue.selector}\`\n\n**Current Value:**\n- Text: \`${issue.textColor}\`\n- Background: \`${issue.bgColor}\`\n\n**Suggested Fixes:**\n${
-                suggestedFg ? `- Change foreground to \`${suggestedFg}\`\n` : ""
-              }${suggestedBg ? `- Change background to \`${suggestedBg}\`\n` : ""}`,
+                githubFixLines
+              }\n\n**Impact:** ${getIssueExplanation(issue)}`,
             )}" target="_blank" class="btn-xs" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
               Create Issue
@@ -1059,11 +1404,15 @@ function renderIssues() {
 
     const pinButton = row.querySelector(".btn-pin");
     if (pinButton) {
+      pinButton.dataset.key = issueKey;
       pinButton.dataset.selector = issue.selector;
       pinButton.dataset.fg = issue.textColor;
       pinButton.dataset.bg = issue.bgColor;
       pinButton.dataset.ratio = String(issue.wcagRatio);
       pinButton.dataset.level = issue.wcagLevel;
+      pinButton.dataset.wcagLevel = issue.wcagLevel;
+      pinButton.dataset.apcaLevel = issue.apcaLevel;
+      pinButton.dataset.apcaScore = String(issue.apcaScore);
     }
 
     fragment.appendChild(row);
@@ -1084,10 +1433,11 @@ function updateEmptyStateVisibility() {
   const hasPicked = pickedSection.style.display !== "none";
   const hasResults = resultsSection.style.display !== "none";
   const hasIssues = issuesSection.style.display !== "none";
+  const hasDiff = diffSection.style.display !== "none";
 
   renderEmptyState();
   emptyState.style.display =
-    hasPalette || hasPicked || hasResults || hasIssues ? "none" : "";
+    hasPalette || hasPicked || hasResults || hasIssues || hasDiff ? "none" : "";
 }
 
 function filterCombinations() {
@@ -1195,12 +1545,15 @@ async function syncWorkspaceFromActiveTab() {
 
   if (savedAnalysis?.palette?.length) {
     setAnalysis(savedAnalysis.palette, savedAnalysis.extractedAt);
+    state.issues = Array.isArray(savedAnalysis.issues) ? savedAnalysis.issues : [];
   } else {
     clearAnalysis();
   }
 
   state.elementPairs = [];
-  state.issues = [];
+  if (!savedAnalysis?.palette?.length) {
+    state.issues = [];
+  }
 
   renderPageContext();
   renderMetrics();
@@ -1220,6 +1573,13 @@ async function syncWorkspaceFromActiveTab() {
       : null,
   );
   if (token !== syncToken) return;
+
+  if (nextPageContext.supported && activeTab?.id) {
+    void sendToTab(activeTab.id, {
+      action: "simulateColorBlindness",
+      type: state.settings.cvdMode || "none",
+    });
+  }
 
   await refreshHistory();
   if (token !== syncToken) return;
@@ -1248,15 +1608,28 @@ async function handleExtract() {
   }
 
   const extractedAt = Date.now();
-
-  if (colorResponse?.colors?.length) {
-    setAnalysis(colorResponse.colors, extractedAt);
-    await saveAnalysisForCurrentPage(colorResponse.colors, extractedAt);
-    await refreshHistory();
-  }
-
+  const nextPalette = colorResponse?.colors?.length
+    ? colorResponse.colors
+    : state.palette;
   state.elementPairs = pairsResponse?.pairs || [];
   state.issues = buildIssuesData(state.elementPairs);
+  const nextIssueSummary = summarizeIssuesForStorage(state.issues);
+
+  if (nextPalette?.length) {
+    if (colorResponse?.colors?.length) {
+      setAnalysis(nextPalette, extractedAt);
+    }
+    state.scanDiff = computeScanDiff(
+      await saveAnalysisForCurrentPage({
+        title: state.pageContext.title,
+        palette: nextPalette,
+        extractedAt,
+        issues: nextIssueSummary,
+      }),
+      nextIssueSummary,
+    );
+    await refreshHistory();
+  }
 
   if (state.settings.consoleWarnings && state.issues.length > 0) {
     const activeTab = await getActiveTab();
@@ -1276,6 +1649,12 @@ async function handleExtract() {
   }
 
   render();
+  if (state.scanDiff) {
+    renderStatusBanner(
+      `${state.scanDiff.newIssues} new issues, ${state.scanDiff.resolvedIssues} resolved since the last scan.`,
+      "info",
+    );
+  }
 }
 
 async function handlePicker() {
@@ -1411,11 +1790,13 @@ consoleWarningsToggle.addEventListener("change", async (e) => {
 standardSelect.addEventListener("change", (e) => {
   state.settings.standard = e.target.value;
   void saveSettings();
-  if (state.colors.length || state.elementPairs.length) {
+  if (state.colors.length) {
     state.combinations = buildCombinationsData(state.colors);
-    state.issues = buildIssuesData(state.elementPairs);
-    render();
   }
+  if (state.elementPairs.length) {
+    state.issues = buildIssuesData(state.elementPairs);
+  }
+  render();
 });
 
 cvdSelect.addEventListener("change", (e) => {
@@ -1424,11 +1805,13 @@ cvdSelect.addEventListener("change", (e) => {
   void saveSettings();
   void sendToContent({ action: "simulateColorBlindness", type });
 
-  if (state.colors.length || state.elementPairs.length) {
+  if (state.colors.length) {
     state.combinations = buildCombinationsData(state.colors);
-    state.issues = buildIssuesData(state.elementPairs);
-    render();
   }
+  if (state.elementPairs.length) {
+    state.issues = buildIssuesData(state.elementPairs);
+  }
+  render();
 });
 
 githubRepoUrlInput.addEventListener("input", (e) => {
@@ -1446,10 +1829,12 @@ historyList.addEventListener("click", async (e) => {
   const analyses = await readAnalysisMap();
   const history = analyses[state.pageContext.url];
   if (!Array.isArray(history)) return;
-  const scan = history[index];
+  const scan = normalizeSavedScan(history[index]);
 
-  if (scan) {
+  if (scan?.extractedAt) {
     setAnalysis(scan.palette, scan.extractedAt);
+    state.elementPairs = [];
+    state.issues = scan.issues || [];
     await refreshHistory();
     render();
   }
@@ -1466,21 +1851,52 @@ pinnedList.addEventListener("click", (e) => {
 combinationsGrid.addEventListener("click", (e) => {
   const btn = e.target.closest(".btn-pin");
   if (!btn) return;
-  const { fg, bg, ratio, level } = btn.dataset;
-  togglePin({ fg, bg, ratio: parseFloat(ratio), level, type: "combo" });
+  const { fg, bg, ratio, level, wcagLevel, apcaLevel, apcaScore } = btn.dataset;
+  togglePin({
+    id: `combo:${fg}:${bg}`,
+    fg,
+    bg,
+    ratio: parseFloat(ratio),
+    level,
+    wcagLevel,
+    apcaLevel,
+    apcaScore: parseFloat(apcaScore),
+    wcagRatio: parseFloat(ratio),
+    type: "combo",
+  });
 });
 
 issuesList.addEventListener("click", (event) => {
+  const selectBtn = event.target.closest(".btn-select-issue");
+  if (selectBtn) {
+    const key = selectBtn.dataset.key;
+    if (!key) return;
+    const index = state.selectedIssueKeys.indexOf(key);
+    if (index > -1) {
+      state.selectedIssueKeys.splice(index, 1);
+    } else {
+      state.selectedIssueKeys.push(key);
+    }
+    renderIssues();
+    return;
+  }
+
   const btn = event.target.closest(".btn-pin");
   if (btn) {
-    const { selector, fg, bg, ratio, level } = btn.dataset;
+    const { key, selector, fg, bg, ratio, level, wcagLevel, apcaLevel, apcaScore } =
+      btn.dataset;
     togglePin({
-      id: selector,
+      id: `issue:${key}`,
+      key,
       selector,
       fg,
       bg,
       ratio: parseFloat(ratio),
       level,
+      wcagLevel,
+      apcaLevel,
+      apcaScore: parseFloat(apcaScore),
+      wcagRatio: parseFloat(ratio),
       type: "issue",
     });
     return;
@@ -1492,7 +1908,7 @@ issuesList.addEventListener("click", (event) => {
   // Handle fix action clicks specifically without triggering the highlight
   if (event.target.classList.contains("btn-copy-fix")) {
     const rule = event.target.dataset.rule;
-    void copyToClipboard(rule);
+    void copyPayloadToClipboard(rule, "CSS fix");
     return;
   }
 
@@ -1530,6 +1946,24 @@ issuesList.addEventListener("click", (event) => {
   }
 });
 
+batchCopyBtn.addEventListener("click", () => {
+  const selectedIssues = state.selectedIssueKeys
+    .map((key) => state.issues.find((issue) => getIssueStableKey(issue) === key))
+    .filter(Boolean);
+
+  const rules = selectedIssues
+    .map((issue) => getIssueFixOptions(issue)?.recommended?.rule || "")
+    .filter(Boolean);
+
+  if (!rules.length) return;
+  void copyPayloadToClipboard(rules.join("\n\n"), "CSS patch");
+});
+
+batchClearBtn.addEventListener("click", () => {
+  state.selectedIssueKeys = [];
+  renderIssues();
+});
+
 issuesList.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
   const row = event.target.closest(".issue-row");
@@ -1560,6 +1994,23 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action !== "cvdModeChanged" || !message.type) return;
+  if (state.settings.cvdMode === message.type) return;
+
+  state.settings.cvdMode = message.type;
+  cvdSelect.value = message.type;
+  void saveSettings();
+
+  if (state.colors.length) {
+    state.combinations = buildCombinationsData(state.colors);
+  }
+  if (state.elementPairs.length) {
+    state.issues = buildIssuesData(state.elementPairs);
+  }
+  render();
+});
+
 chrome.tabs.onActivated.addListener(() => {
   void syncWorkspaceFromActiveTab();
 });
@@ -1574,6 +2025,16 @@ async function copyToClipboard(text) {
   try {
     await navigator.clipboard.writeText(text);
     renderStatusBanner(`Copied ${text} to clipboard`, "info");
+    setTimeout(() => clearStatusBanner(), 2000);
+  } catch (err) {
+    console.error("Failed to copy:", err);
+  }
+}
+
+async function copyPayloadToClipboard(text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    renderStatusBanner(`Copied ${label} to clipboard`, "info");
     setTimeout(() => clearStatusBanner(), 2000);
   } catch (err) {
     console.error("Failed to copy:", err);

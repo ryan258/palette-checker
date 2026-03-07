@@ -926,6 +926,152 @@
     removePickerOverlay();
   }
 
+  const CVD_OPTIONS = [
+    { type: "none", label: "Normal", shortcut: "0" },
+    { type: "protanopia", label: "P", shortcut: "1" },
+    { type: "protanomaly", label: "Pw", shortcut: "2" },
+    { type: "deuteranopia", label: "D", shortcut: "3" },
+    { type: "deuteranomaly", label: "Dw", shortcut: "4" },
+    { type: "tritanopia", label: "T", shortcut: "5" },
+    { type: "tritanomaly", label: "Tw", shortcut: "6" },
+    { type: "achromatopsia", label: "Mono", shortcut: "7" },
+    { type: "achromatomaly", label: "Low", shortcut: "8" },
+  ];
+  let cvdToolbar = null;
+  let cvdToolbarStyle = null;
+  let activeCvdMode = "none";
+  let cvdShortcutBound = false;
+
+  function ensureCvdToolbar() {
+    if (!document.body) return;
+
+    if (!cvdToolbarStyle) {
+      cvdToolbarStyle = document.createElement("style");
+      cvdToolbarStyle.id = "chromacheck-cvd-toolbar-style";
+      cvdToolbarStyle.textContent = `
+        #chromacheck-cvd-toolbar {
+          position: fixed;
+          top: 16px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 2147483645;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 10px;
+          border-radius: 999px;
+          border: 1px solid rgba(148, 163, 184, 0.25);
+          background: rgba(2, 6, 23, 0.88);
+          color: #e2e8f0;
+          box-shadow: 0 12px 30px rgba(2, 6, 23, 0.35);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          font: 11px/1.2 ui-monospace, SFMono-Regular, monospace;
+        }
+        #chromacheck-cvd-toolbar .chromacheck-toolbar-label {
+          color: #94a3b8;
+          margin-right: 4px;
+        }
+        #chromacheck-cvd-toolbar button {
+          min-width: 30px;
+          min-height: 28px;
+          padding: 0 8px;
+          border: 1px solid rgba(148, 163, 184, 0.2);
+          border-radius: 999px;
+          background: rgba(15, 23, 42, 0.92);
+          color: inherit;
+          cursor: pointer;
+        }
+        #chromacheck-cvd-toolbar button[data-active="true"] {
+          border-color: rgba(56, 189, 248, 0.6);
+          background: rgba(56, 189, 248, 0.18);
+          color: #d6f3ff;
+        }
+      `;
+      document.documentElement.appendChild(cvdToolbarStyle);
+    }
+
+    if (cvdToolbar) return;
+
+    cvdToolbar = document.createElement("div");
+    cvdToolbar.id = "chromacheck-cvd-toolbar";
+    cvdToolbar.innerHTML = `
+      <span class="chromacheck-toolbar-label">Alt+Shift</span>
+      ${CVD_OPTIONS.map(
+        (option) => `
+          <button
+            type="button"
+            data-cvd-type="${option.type}"
+            data-active="${option.type === activeCvdMode}"
+            title="${option.type} (${option.shortcut})"
+          >
+            ${option.label}
+          </button>
+        `,
+      ).join("")}
+    `;
+    cvdToolbar.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-cvd-type]");
+      if (!button) return;
+      applyColorBlindnessMode(button.dataset.cvdType, true);
+    });
+    document.body.appendChild(cvdToolbar);
+  }
+
+  function syncCvdToolbar() {
+    if (!cvdToolbar) return;
+    cvdToolbar
+      .querySelectorAll("button[data-cvd-type]")
+      .forEach((button) => {
+        button.dataset.active = String(
+          button.dataset.cvdType === activeCvdMode,
+        );
+      });
+  }
+
+  function applyColorBlindnessMode(type, shouldBroadcast = false) {
+    activeCvdMode = type || "none";
+    ensureCvdToolbar();
+
+    if (activeCvdMode !== "none") {
+      document.documentElement.style.filter = `url(#chromacheck-${activeCvdMode})`;
+    } else {
+      document.documentElement.style.filter = "";
+    }
+
+    syncCvdToolbar();
+
+    if (shouldBroadcast) {
+      chrome.runtime.sendMessage({
+        action: "cvdModeChanged",
+        type: activeCvdMode,
+      });
+    }
+  }
+
+  function handleSimulationShortcut(event) {
+    if (!event.altKey || !event.shiftKey) return;
+    if (event.metaKey || event.ctrlKey) return;
+    if (
+      event.target instanceof HTMLElement &&
+      (event.target.closest("input, textarea, select") ||
+        event.target.isContentEditable)
+    ) {
+      return;
+    }
+
+    const nextOption = CVD_OPTIONS.find((option) => option.shortcut === event.key);
+    if (!nextOption) return;
+    event.preventDefault();
+    applyColorBlindnessMode(nextOption.type, true);
+  }
+
+  function bindSimulationShortcut() {
+    if (cvdShortcutBound) return;
+    document.addEventListener("keydown", handleSimulationShortcut, true);
+    cvdShortcutBound = true;
+  }
+
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.action === "getPageContext") {
@@ -967,12 +1113,7 @@
       return false;
     }
     if (message.action === "simulateColorBlindness") {
-      const type = message.type; // e.g. "protanopia", or "none"
-      if (type && type !== "none") {
-        document.documentElement.style.filter = `url(#chromacheck-${type})`;
-      } else {
-        document.documentElement.style.filter = "";
-      }
+      applyColorBlindnessMode(message.type, false);
       sendResponse({ ok: true });
       return false;
     }
@@ -1029,7 +1170,10 @@
 
   // Inject SVG Filters for Color Blindness Simulation
   function initColorBlindnessFilters() {
-    if (document.getElementById("chromacheck-color-blind-filters")) return;
+    if (document.getElementById("chromacheck-color-blind-filters")) {
+      bindSimulationShortcut();
+      return;
+    }
 
     // Using widely accepted LMS to RGB transformation matrices for accurate CVD simulation
     const svgStr = `
@@ -1065,6 +1209,7 @@
     const div = document.createElement("div");
     div.innerHTML = svgStr;
     document.body.appendChild(div.firstElementChild);
+    bindSimulationShortcut();
   }
 
   // Initialize filters on script load

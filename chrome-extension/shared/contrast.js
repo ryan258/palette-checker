@@ -261,7 +261,6 @@ function hslToHex(h, s, l) {
 
 function suggestPassingColor(hexToChange, fixedHex, targetRatio = 4.5) {
   const startHsl = hexToHsl(hexToChange);
-  const fixedLum = getRelativeLuminance(fixedHex);
 
   // Try lightening
   let lightPassed = null;
@@ -293,6 +292,65 @@ function suggestPassingColor(hexToChange, fixedHex, targetRatio = 4.5) {
   return lightDiff < darkDiff ? lightPassed : darkPassed;
 }
 
+function getSuggestedFixes(textHex, bgHex, targetRatio = 4.5) {
+  const originalText = textHex.toLowerCase();
+  const originalBg = bgHex.toLowerCase();
+  const textSuggestion = suggestPassingColor(originalText, originalBg, targetRatio);
+  const bgSuggestion = suggestPassingColor(originalBg, originalText, targetRatio);
+
+  const buildOption = (property, original, suggestion, other) => {
+    if (!suggestion) return null;
+
+    const beforeRatio = getContrastRatio(originalText, originalBg);
+    const nextText = property === "color" ? suggestion : originalText;
+    const nextBg =
+      property === "background-color" ? suggestion : originalBg;
+    const afterRatio = getContrastRatio(nextText, nextBg);
+    const originalHsl = hexToHsl(original);
+    const nextHsl = hexToHsl(suggestion);
+
+    return {
+      property,
+      original,
+      suggestion,
+      fixedHex: other,
+      beforeRatio,
+      afterRatio,
+      delta:
+        Math.abs(originalHsl.h - nextHsl.h) * 0.25 +
+        Math.abs(originalHsl.s - nextHsl.s) * 0.25 +
+        Math.abs(originalHsl.l - nextHsl.l) * 0.5,
+    };
+  };
+
+  const textOption = buildOption(
+    "color",
+    originalText,
+    textSuggestion,
+    originalBg,
+  );
+  const backgroundOption = buildOption(
+    "background-color",
+    originalBg,
+    bgSuggestion,
+    originalText,
+  );
+
+  let recommended = textOption;
+  if (
+    backgroundOption &&
+    (!recommended || backgroundOption.delta < recommended.delta)
+  ) {
+    recommended = backgroundOption;
+  }
+
+  return {
+    text: textOption,
+    background: backgroundOption,
+    recommended,
+  };
+}
+
 function getAPCAMinimumRequirements(lc) {
   const abs = Math.abs(lc);
   if (abs < 15) return "Invisible (Do not use)";
@@ -302,6 +360,52 @@ function getAPCAMinimumRequirements(lc) {
   if (abs < 75) return "Body text (18px/400 or 14px/700)";
   if (abs < 90) return "Small text (14px/400)";
   return "Fluent text (All sizes)";
+}
+
+function getAPCAPolarity(lc) {
+  if (lc === 0) {
+    return {
+      key: "neutral",
+      label: "Neutral polarity",
+      description: "The foreground and background are too close to separate.",
+    };
+  }
+
+  if (lc > 0) {
+    return {
+      key: "dark-on-light",
+      label: "Dark text on light",
+      description: "Positive APCA polarity. Dark foreground over a lighter background.",
+    };
+  }
+
+  return {
+    key: "light-on-dark",
+    label: "Light text on dark",
+    description: "Negative APCA polarity. Light foreground over a darker background.",
+  };
+}
+
+function getAPCARecommendationDetails(lc) {
+  const abs = Math.abs(lc);
+  const polarity = getAPCAPolarity(lc);
+  const minimumText = getAPCAMinimumRequirements(lc);
+
+  let tier = "Unsafe";
+  if (abs >= 90) tier = "Gold";
+  else if (abs >= 75) tier = "Gold";
+  else if (abs >= 60) tier = "Silver";
+  else if (abs >= 45) tier = "Bronze";
+
+  return {
+    tier,
+    minimumText,
+    polarity,
+    summary:
+      tier === "Unsafe"
+        ? `${polarity.label}. Increase contrast before relying on this pair for readable text.`
+        : `${polarity.label}. ${tier} guidance: ${minimumText}.`,
+  };
 }
 
 // Phase 4: Color Blindness Math
@@ -369,11 +473,14 @@ if (typeof module !== "undefined" && module.exports) {
     formatContrastRatio,
     getAPCAComplianceLevel,
     getAPCAMinimumRequirements,
+    getAPCAPolarity,
+    getAPCARecommendationDetails,
     getComplianceLevel,
     getContextualComplianceLevel,
     getContrastRatio,
     getLevelRank,
     getRelativeLuminance,
+    getSuggestedFixes,
     hexToHsl,
     hexToRgb,
     hslToHex,
