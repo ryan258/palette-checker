@@ -5,6 +5,10 @@
 
 (() => {
   const PICKER_STATE_KEY = "chromacheckPickerState";
+  const TRACKED_ID_ATTR = "data-chromacheck-id";
+  const TRACKED_PLACEHOLDER_ID_ATTR = "data-chromacheck-ph-id";
+  const PREVIEW_TARGET_ATTR = "data-chromacheck-preview-target";
+  const trackedElements = new Map();
 
   function rgbToHex(rgbStr) {
     const match = rgbStr.match(
@@ -248,6 +252,68 @@
     return parts.join(" > ") || el.tagName.toLowerCase();
   }
 
+  function queryAllDeep(selector, root = document.documentElement) {
+    const results = [];
+    const seen = new Set();
+    const stack = [root];
+
+    while (stack.length > 0) {
+      const node = stack.pop();
+      if (!node) continue;
+
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.matches(selector) && !seen.has(node)) {
+          seen.add(node);
+          results.push(node);
+        }
+        if (node.shadowRoot) {
+          stack.push(node.shadowRoot);
+        }
+      }
+
+      const children = node.children || [];
+      for (let i = children.length - 1; i >= 0; i -= 1) {
+        stack.push(children[i]);
+      }
+    }
+
+    return results;
+  }
+
+  function clearTrackedAttributes() {
+    trackedElements.clear();
+    queryAllDeep(
+      `[${TRACKED_ID_ATTR}], [${TRACKED_PLACEHOLDER_ID_ATTR}]`,
+    ).forEach((node) => {
+      node.removeAttribute(TRACKED_ID_ATTR);
+      node.removeAttribute(TRACKED_PLACEHOLDER_ID_ATTR);
+    });
+  }
+
+  function trackElement(id, el, attrName = TRACKED_ID_ATTR) {
+    if (!id || !el) return;
+    el.setAttribute(attrName, id);
+    trackedElements.set(id, el);
+  }
+
+  function resolveTrackedElement(id) {
+    if (!id) return null;
+
+    const tracked = trackedElements.get(id);
+    if (tracked?.isConnected) return tracked;
+
+    const selector = `[${TRACKED_ID_ATTR}="${CSS.escape(id)}"], [${TRACKED_PLACEHOLDER_ID_ATTR}="${CSS.escape(id)}"]`;
+    const resolved = queryAllDeep(selector)[0] || null;
+
+    if (resolved) {
+      trackedElements.set(id, resolved);
+      return resolved;
+    }
+
+    trackedElements.delete(id);
+    return null;
+  }
+
   let tokenCache = null;
 
   function buildTokenMap() {
@@ -263,6 +329,7 @@
                 if (prop.startsWith("--")) {
                   const value = rule.style.getPropertyValue(prop).trim();
                   const dummy = document.createElement("div");
+                  dummy.id = "chromacheck-token-probe";
                   dummy.style.backgroundColor = value;
                   if (dummy.style.backgroundColor) {
                     document.body.appendChild(dummy);
@@ -302,9 +369,8 @@
   }
 
   function extractElementPairs() {
-    document.querySelectorAll("[data-chromacheck-id]").forEach((n) => {
-      n.removeAttribute("data-chromacheck-id");
-    });
+    clearTrackedAttributes();
+    tokenCache = null;
 
     const pairs = [];
     const processed = new Set();
@@ -356,13 +422,14 @@
 
         if (textColor !== bgColor) {
           const id = String(idCounter++);
-          el.setAttribute("data-chromacheck-id", id);
+          trackElement(id, el);
           pairs.push({
             id,
             textColor,
             textColorToken: tokenMap.get(textColor),
             bgColor,
             bgColorToken: tokenMap.get(bgColor),
+            foregroundProperty: "color",
             selector: getMinimalSelector(el),
             textPreview: directText.slice(0, 60),
             tagName: el.tagName.toLowerCase(),
@@ -386,8 +453,8 @@
           (rect.width < 24 || rect.height < 24)
         ) {
           const id =
-            el.getAttribute("data-chromacheck-id") || String(idCounter++);
-          el.setAttribute("data-chromacheck-id", id);
+            el.getAttribute(TRACKED_ID_ATTR) || String(idCounter++);
+          trackElement(id, el);
           pairs.push({
             id,
             textColor: "#ff0000", // Placeholder fail colors for non-color failures
@@ -418,13 +485,14 @@
 
         if (linkColorHex && parentColorHex && linkColorHex !== parentColorHex) {
           const id =
-            linkEl.getAttribute("data-chromacheck-id") || String(idCounter++);
-          linkEl.setAttribute("data-chromacheck-id", id);
+            linkEl.getAttribute(TRACKED_ID_ATTR) || String(idCounter++);
+          trackElement(id, linkEl);
 
           pairs.push({
             id,
             textColor: linkColorHex,
             bgColor: parentColorHex,
+            foregroundProperty: "color",
             selector: getMinimalSelector(linkEl),
             textPreview: `Link missing underline needs 3:1 against text`,
             tagName: "a",
@@ -439,26 +507,6 @@
     // Start text traversal
     walkNodes(document.body);
 
-    // Helper for finding elements across shadow boundaries
-    function queryAllDeep(selector, root = document.body) {
-      const results = [];
-      const stack = [root];
-      while (stack.length > 0) {
-        const node = stack.pop();
-        if (node.shadowRoot) stack.push(node.shadowRoot);
-
-        if (node.querySelectorAll) {
-          results.push(...node.querySelectorAll(selector));
-        }
-
-        // Add child elements to stack
-        for (const child of node.children || []) {
-          stack.push(child);
-        }
-      }
-      return results;
-    }
-
     // Phase 6: SVGs and Non-text Contrast
     queryAllDeep("svg, path, circle, rect, polygon").forEach((svgEl) => {
       if (processed.has(svgEl)) return;
@@ -469,10 +517,18 @@
       const stroke = style.stroke;
 
       let targetColor = "none";
-      if (fill && fill !== "none" && fill !== "rgba(0, 0, 0, 0)")
+      let foregroundProperty = "color";
+      if (fill && fill !== "none" && fill !== "rgba(0, 0, 0, 0)") {
         targetColor = fill;
-      else if (stroke && stroke !== "none" && stroke !== "rgba(0, 0, 0, 0)")
+        foregroundProperty = "fill";
+      } else if (
+        stroke &&
+        stroke !== "none" &&
+        stroke !== "rgba(0, 0, 0, 0)"
+      ) {
         targetColor = stroke;
+        foregroundProperty = "stroke";
+      }
 
       if (targetColor === "none") return;
 
@@ -486,13 +542,14 @@
       if (fgHex === bgHex) return;
 
       const id = String(idCounter++);
-      svgEl.setAttribute("data-chromacheck-id", id);
+      trackElement(id, svgEl);
       pairs.push({
         id,
         textColor: fgHex,
         textColorToken: tokenMap.get(fgHex),
         bgColor: bgHex,
         bgColorToken: tokenMap.get(bgHex),
+        foregroundProperty,
         selector: getMinimalSelector(svgEl),
         textPreview: `<${svgEl.tagName.toLowerCase()}>\u200B icon or graphic`,
         tagName: svgEl.tagName.toLowerCase(),
@@ -526,14 +583,15 @@
             const bgHex = componentsToHex(renderedPair.background);
             if (fgHex !== bgHex) {
               const id =
-                el.getAttribute("data-chromacheck-id") || String(idCounter++);
-              el.setAttribute("data-chromacheck-id", id);
+                el.getAttribute(TRACKED_ID_ATTR) || String(idCounter++);
+              trackElement(id, el);
               pairs.push({
                 id,
                 textColor: fgHex,
                 textColorToken: tokenMap.get(fgHex),
                 bgColor: bgHex,
                 bgColorToken: tokenMap.get(bgHex),
+                foregroundProperty: `border-${dir.toLowerCase()}-color`,
                 selector: getMinimalSelector(el),
                 textPreview: `Border Contrast (${dir})`,
                 tagName: el.tagName.toLowerCase(),
@@ -556,19 +614,19 @@
         const phStyle = window.getComputedStyle(el, "::placeholder");
         const phRgba = parseRGBA(phStyle.color);
         if (phRgba && phRgba.a > 0) {
-          const bgRgba = parseRGBA(style.backgroundColor);
           const renderedPair = getRenderedPair(el, phRgba); // approximate bg
           const fgHex = componentsToHex(renderedPair.text);
           const bgHex = componentsToHex(renderedPair.background);
 
           const id = String(idCounter++);
-          el.setAttribute("data-chromacheck-ph-id", id); // Different attribute to not conflict with base element
+          trackElement(id, el, TRACKED_PLACEHOLDER_ID_ATTR);
           pairs.push({
             id,
             textColor: fgHex,
             textColorToken: tokenMap.get(fgHex),
             bgColor: bgHex,
             bgColorToken: tokenMap.get(bgHex),
+            foregroundProperty: "color",
             selector: `${getMinimalSelector(el)}::placeholder`,
             textPreview: `Placeholder text`,
             tagName: el.tagName.toLowerCase(),
@@ -585,17 +643,81 @@
 
   let activeHighlight = null;
   let highlightTimer = null;
+  let previewFixState = null;
+
+  function clearHighlight() {
+    if (!activeHighlight) return;
+    activeHighlight.style.removeProperty("outline");
+    activeHighlight.style.removeProperty("outline-offset");
+    activeHighlight = null;
+  }
+
+  function clearPreviewFix() {
+    if (!previewFixState) return;
+
+    previewFixState.styleEl?.remove();
+    previewFixState.targetEl?.removeAttribute(PREVIEW_TARGET_ATTR);
+    previewFixState = null;
+  }
+
+  function getStyleHost(rootNode) {
+    if (rootNode instanceof ShadowRoot) return rootNode;
+    return document.head || document.documentElement;
+  }
+
+  function applyPreviewFix(id, selector, prop, val) {
+    clearPreviewFix();
+
+    const target = resolveTrackedElement(id);
+    const property = prop || "color";
+
+    if (target) {
+      const style = document.createElement("style");
+      style.id = "chromacheck-preview-fix";
+      target.setAttribute(PREVIEW_TARGET_ATTR, id);
+
+      const targetSelector = `[${PREVIEW_TARGET_ATTR}="${CSS.escape(id)}"]`;
+      const previewSelector =
+        selector && selector.includes("::placeholder")
+          ? `${targetSelector}::placeholder`
+          : targetSelector;
+
+      style.textContent = `
+        ${previewSelector} { ${property}: ${val} !important; }
+        ${targetSelector} {
+          outline: 3px solid ${val} !important;
+          outline-offset: 2px !important;
+        }
+      `;
+      getStyleHost(target.getRootNode()).appendChild(style);
+      previewFixState = { styleEl: style, targetEl: target };
+      return true;
+    }
+
+    if (!selector) return false;
+
+    const style = document.createElement("style");
+    style.id = "chromacheck-preview-fix";
+    const outlineSelector = selector.includes("::")
+      ? selector.replace(/::[a-zA-Z-]+$/, "")
+      : selector;
+    style.textContent = `
+      ${selector} { ${property}: ${val} !important; }
+      ${outlineSelector} {
+        outline: 3px solid ${val} !important;
+        outline-offset: 2px !important;
+      }
+    `;
+    getStyleHost(document).appendChild(style);
+    previewFixState = { styleEl: style, targetEl: null };
+    return true;
+  }
 
   function highlightElement(id) {
-    if (activeHighlight) {
-      activeHighlight.style.removeProperty("outline");
-      activeHighlight.style.removeProperty("outline-offset");
-    }
+    clearHighlight();
     if (highlightTimer) clearTimeout(highlightTimer);
 
-    const el = document.querySelector(
-      '[data-chromacheck-id="' + CSS.escape(id) + '"]',
-    );
+    const el = resolveTrackedElement(id);
     if (!el) return false;
 
     el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -617,7 +739,40 @@
   // --- Phase 2: Live Re-Analysis & Mutation Tracking ---
 
   let mutationTimer = null;
-  const mutationObserver = new MutationObserver(() => {
+  function isChromaCheckNode(node) {
+    if (!node) return false;
+    if (node.nodeType === Node.TEXT_NODE) {
+      return isChromaCheckNode(node.parentElement);
+    }
+    if (!(node instanceof Element)) return false;
+    if (node.id?.startsWith("chromacheck")) return true;
+    if (
+      node.hasAttribute(TRACKED_ID_ATTR) ||
+      node.hasAttribute(TRACKED_PLACEHOLDER_ID_ATTR) ||
+      node.hasAttribute(PREVIEW_TARGET_ATTR)
+    ) {
+      return true;
+    }
+    return Boolean(
+      node.closest(
+        `[id^="chromacheck"], [${TRACKED_ID_ATTR}], [${TRACKED_PLACEHOLDER_ID_ATTR}], [${PREVIEW_TARGET_ATTR}]`,
+      ),
+    );
+  }
+
+  function hasExternalMutation(records) {
+    return records.some((record) => {
+      if (record.type === "childList") {
+        return [...record.addedNodes, ...record.removedNodes].some(
+          (node) => !isChromaCheckNode(node),
+        );
+      }
+      return !isChromaCheckNode(record.target);
+    });
+  }
+
+  const mutationObserver = new MutationObserver((records) => {
+    if (!hasExternalMutation(records)) return;
     if (mutationTimer) clearTimeout(mutationTimer);
     mutationTimer = setTimeout(() => {
       chrome.runtime.sendMessage({ action: "onPageMutation" });
@@ -674,6 +829,26 @@
     return "rgb(255, 255, 255)";
   }
 
+  function getPickerSnapshot(target) {
+    const style = window.getComputedStyle(target);
+    const textRGBA = parseRGBA(style.color);
+    const renderedPair =
+      textRGBA && textRGBA.a > 0 ? getRenderedPair(target, textRGBA) : null;
+
+    return {
+      fg:
+        (renderedPair && componentsToHex(renderedPair.text)) ||
+        rgbToHex(style.color),
+      bg:
+        (renderedPair && componentsToHex(renderedPair.background)) ||
+        rgbToHex(getEffectiveBg(target)),
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      selector: getMinimalSelector(target),
+      tagName: target.tagName.toLowerCase(),
+    };
+  }
+
   function handlePickerMove(e) {
     // Hide overlay temporarily to get element underneath
     overlay.style.pointerEvents = "none";
@@ -682,9 +857,9 @@
 
     if (!target) return;
 
-    const style = window.getComputedStyle(target);
-    const fg = rgbToHex(style.color) || "N/A";
-    const bg = rgbToHex(getEffectiveBg(target)) || "N/A";
+    const pickerSnapshot = getPickerSnapshot(target);
+    const fg = pickerSnapshot.fg || "N/A";
+    const bg = pickerSnapshot.bg || "N/A";
 
     tooltip.style.display = "block";
     tooltip.style.left = e.clientX + 16 + "px";
@@ -706,15 +881,12 @@
 
     if (!target) return;
 
-    const style = window.getComputedStyle(target);
-    const fg = rgbToHex(style.color);
-    const bg = rgbToHex(getEffectiveBg(target));
+    const pickerSnapshot = getPickerSnapshot(target);
 
     chrome.storage.local.set({
       [PICKER_STATE_KEY]: {
         status: "picked",
-        fg: fg,
-        bg: bg,
+        ...pickerSnapshot,
         url: window.location.href,
         updatedAt: Date.now(),
       },
@@ -811,19 +983,18 @@
       return false;
     }
     if (message.action === "previewFix") {
-      let style = document.getElementById("chromacheck-preview-fix");
-      if (!style) {
-        style = document.createElement("style");
-        style.id = "chromacheck-preview-fix";
-        document.head.appendChild(style);
-      }
-      style.textContent = `${message.selector} { ${message.prop}: ${message.val} !important; outline: 3px solid ${message.val} !important; outline-offset: 2px !important; }`;
-      sendResponse({ ok: true });
+      sendResponse({
+        ok: applyPreviewFix(
+          message.id,
+          message.selector,
+          message.prop,
+          message.val,
+        ),
+      });
       return false;
     }
     if (message.action === "revertPreviewFix") {
-      const style = document.getElementById("chromacheck-preview-fix");
-      if (style) style.remove();
+      clearPreviewFix();
       sendResponse({ ok: true });
       return false;
     }

@@ -153,12 +153,30 @@ function formatAPCAScore(lc) {
   return `Lc ${sign}${lc.toFixed(1)}`;
 }
 
-function getContextualComplianceLevel(
-  ratio,
-  fontSize,
-  fontWeight,
-  standard = "WCAG21",
-) {
+function normalizeStandard(standard = "WCAG21") {
+  switch (standard) {
+    case "WCAG22":
+    case "APCA":
+      return standard;
+    default:
+      return "WCAG21";
+  }
+}
+
+function shouldIncludeIssueType(type, standard = "WCAG21") {
+  const activeStandard = normalizeStandard(standard);
+
+  switch (type) {
+    case "target-size":
+      return activeStandard === "WCAG22";
+    case "link-contrast":
+      return activeStandard !== "APCA";
+    default:
+      return true;
+  }
+}
+
+function getContextualComplianceLevel(ratio, fontSize, fontWeight) {
   const size = parseFloat(fontSize);
   const weight = parseInt(fontWeight, 10) || 400;
 
@@ -337,4 +355,34 @@ function simulateCVD(hex, type) {
 
   const toHex = (x) => Math.round(x).toString(16).padStart(2, "0");
   return `#${toHex(nr)}${toHex(ng)}${toHex(nb)}`;
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    APCA_BCO,
+    APCA_GCO,
+    APCA_RCO,
+    CVD_MATRICES,
+    calcAPCA,
+    expandHex,
+    formatAPCAScore,
+    formatContrastRatio,
+    getAPCAComplianceLevel,
+    getAPCAMinimumRequirements,
+    getComplianceLevel,
+    getContextualComplianceLevel,
+    getContrastRatio,
+    getLevelRank,
+    getRelativeLuminance,
+    hexToHsl,
+    hexToRgb,
+    hslToHex,
+    isTransparent,
+    isValidHex,
+    normalizeStandard,
+    rgbStringToHex,
+    shouldIncludeIssueType,
+    simulateCVD,
+    suggestPassingColor,
+  };
 }

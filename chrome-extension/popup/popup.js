@@ -199,9 +199,6 @@ async function sendToContent(message) {
 
 function setupRuntimeListeners() {
   chrome.runtime.onMessage.addListener((message, sender) => {
-    if (message.action === "pickerColorSelected") {
-      setPickedElement(message.data);
-    }
     if (message.action === "onPageMutation") {
       void handlePageMutation(sender?.tab?.id);
     }
@@ -249,6 +246,10 @@ function getStatusBadgeClass(level) {
   }
 }
 
+function getScoreTone(level) {
+  return level === "Fail" ? "fail" : "pass";
+}
+
 function buildCombinationsData(colors) {
   const uniqueColors = [...new Set(colors)];
   const combinations = [];
@@ -264,12 +265,7 @@ function buildCombinationsData(colors) {
       const simBg = simulateCVD(bgHex, cvdMode);
 
       const wcagRatio = getContrastRatio(simText, simBg);
-      const wcagLevel = getContextualComplianceLevel(
-        wcagRatio,
-        16,
-        400,
-        state.settings.standard,
-      );
+      const wcagLevel = getContextualComplianceLevel(wcagRatio, 16, 400);
       const apcaScore = calcAPCA(simText, simBg);
       const apcaLevel = getAPCAComplianceLevel(apcaScore, 16, 400);
 
@@ -556,7 +552,7 @@ function renderPinned() {
         <div class="combo-scores">
           <div class="score-group">
             <span class="score-label">Ratio</span>
-            <span class="score-value ${item.ratio < 4.5 ? "fail" : "pass"}">${item.ratio.toFixed(2)}</span>
+            <span class="score-value ${getScoreTone(item.level)}">${item.ratio.toFixed(2)}</span>
           </div>
           <span class="status-badge ${getStatusBadgeClass(item.level)}">${item.level}</span>
         </div>
@@ -669,13 +665,29 @@ function clearPickedView() {
   updateEmptyStateVisibility();
 }
 
-function renderPickedResult(fg, bg) {
+function renderPickedResult(pickerResultOrFg, fallbackBg) {
+  const pickerResult =
+    pickerResultOrFg &&
+    typeof pickerResultOrFg === "object" &&
+    !Array.isArray(pickerResultOrFg)
+      ? pickerResultOrFg
+      : { fg: pickerResultOrFg, bg: fallbackBg };
+  const { fg, bg, fontSize, fontWeight, tagName } = pickerResult;
+
   if (!fg || !bg) return;
 
   const wcagRatio = getContrastRatio(fg, bg);
-  const wcagLevel = getComplianceLevel(wcagRatio);
+  const wcagLevel = getContextualComplianceLevel(
+    wcagRatio,
+    fontSize || "16px",
+    fontWeight || "400",
+  );
   const apcaScore = calcAPCA(fg, bg);
-  const apcaLevel = getAPCAComplianceLevel(apcaScore);
+  const apcaLevel = getAPCAComplianceLevel(
+    apcaScore,
+    fontSize || "16px",
+    fontWeight || "400",
+  );
 
   pickedSection.style.display = "";
   pickedResult.innerHTML = `
@@ -687,15 +699,29 @@ function renderPickedResult(fg, bg) {
         <span>Text: ${fg.toUpperCase()}</span>
         <span>Background: ${bg.toUpperCase()}</span>
       </div>
+      ${
+        fontSize || fontWeight || tagName
+          ? `
+      <div class="picked-colors">
+        ${tagName ? `<span>Element: &lt;${escapeHtml(tagName)}&gt;</span>` : ""}
+        ${
+          fontSize || fontWeight
+            ? `<span>Typography: ${escapeHtml(fontSize || "Unknown")} / ${escapeHtml(fontWeight || "Unknown")}</span>`
+            : ""
+        }
+      </div>
+      `
+          : ""
+      }
       <div class="combo-scores">
         <div class="score-group">
           <span class="score-label">WCAG</span>
-          <span class="score-value ${wcagRatio >= 4.5 ? "pass" : "fail"}">${formatContrastRatio(wcagRatio)}</span>
+          <span class="score-value ${getScoreTone(wcagLevel)}">${formatContrastRatio(wcagRatio)}</span>
           <span class="status-badge ${getStatusBadgeClass(wcagLevel)}">${wcagLevel}</span>
         </div>
         <div class="score-group">
           <span class="score-label">APCA</span>
-          <span class="score-value ${Math.abs(apcaScore) >= 60 ? "pass" : "fail"}">${formatAPCAScore(apcaScore)}</span>
+          <span class="score-value ${getScoreTone(apcaLevel)}">${formatAPCAScore(apcaScore)}</span>
           <span class="status-badge ${getStatusBadgeClass(apcaLevel)}">${apcaLevel}</span>
         </div>
       </div>
@@ -812,6 +838,7 @@ function buildIssuesData(pairs) {
   const cvdMode = state.settings.cvdMode || "none";
 
   return pairs
+    .filter((pair) => shouldIncludeIssueType(pair.type, state.settings.standard))
     .map((pair) => {
       const simText = simulateCVD(pair.textColor, cvdMode);
       const simBg = simulateCVD(pair.bgColor, cvdMode);
@@ -821,7 +848,6 @@ function buildIssuesData(pairs) {
         wcagRatio,
         pair.fontSize,
         pair.fontWeight,
-        state.settings.standard,
       );
       let apcaScore = calcAPCA(simText, simBg);
       let apcaLevel = getAPCAComplianceLevel(
@@ -930,12 +956,12 @@ function renderIssues() {
         <div class="combo-scores">
           <div class="score-group ${state.settings.standard === "APCA" ? "inactive-standard" : "active-standard"}">
             <span class="score-label">WCAG</span>
-            <span class="score-value ${issue.wcagRatio >= 4.5 ? "pass" : "fail"}">${formatContrastRatio(issue.wcagRatio)}</span>
+            <span class="score-value ${getScoreTone(issue.wcagLevel)}">${formatContrastRatio(issue.wcagRatio)}</span>
             <span class="status-badge ${getStatusBadgeClass(issue.wcagLevel)}">${issue.wcagLevel}</span>
           </div>
           <div class="score-group ${state.settings.standard === "APCA" ? "active-standard" : "inactive-standard"}">
             <span class="score-label">APCA</span>
-            <span class="score-value ${Math.abs(issue.apcaScore) >= 60 ? "pass" : "fail"}">${formatAPCAScore(issue.apcaScore)}</span>
+            <span class="score-value ${getScoreTone(issue.apcaLevel)}">${formatAPCAScore(issue.apcaScore)}</span>
             <span class="status-badge ${getStatusBadgeClass(issue.apcaLevel)}">${issue.apcaLevel}</span>
           </div>
         </div>
@@ -959,6 +985,9 @@ function renderIssues() {
     ) {
       const suggestedFg = suggestPassingColor(issue.textColor, issue.bgColor);
       const suggestedBg = suggestPassingColor(issue.bgColor, issue.textColor);
+      const foregroundSelector = issue.selector;
+      const backgroundSelector = issue.selector.replace(/::placeholder$/, "");
+      const foregroundProperty = issue.foregroundProperty || "color";
       const apcaReq =
         issue.type === "text" || issue.type === "placeholder"
           ? getAPCAMinimumRequirements(issue.apcaScore)
@@ -974,8 +1003,8 @@ function renderIssues() {
               <div class="fix-option">
                 <span class="fix-desc">Change foreground to <strong>${suggestedFg.toUpperCase()}</strong></span>
                 <div class="fix-actions">
-                  <button type="button" class="btn-xs btn-preview-fix" data-selector="${escapeHtml(issue.selector)}" data-prop="${issue.type === "non-text" && issue.tagName === "path" ? "fill" : "color"}" data-val="${suggestedFg}">Preview</button>
-                  <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(issue.selector)} { ${issue.type === "non-text" && issue.tagName === "path" ? "fill" : "color"}: ${suggestedFg}; }">Copy CSS</button>
+                  <button type="button" class="btn-xs btn-preview-fix" data-id="${issue.id}" data-selector="${escapeHtml(foregroundSelector)}" data-prop="${escapeHtml(foregroundProperty)}" data-val="${suggestedFg}">Preview</button>
+                  <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(foregroundSelector)} { ${escapeHtml(foregroundProperty)}: ${suggestedFg}; }">Copy CSS</button>
                 </div>
               </div>
             `
@@ -987,8 +1016,8 @@ function renderIssues() {
               <div class="fix-option">
                 <span class="fix-desc">Change background to <strong>${suggestedBg.toUpperCase()}</strong></span>
                 <div class="fix-actions">
-                  <button type="button" class="btn-xs btn-preview-fix" data-selector="${escapeHtml(issue.selector)}" data-prop="background" data-val="${suggestedBg}">Preview</button>
-                  <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(issue.selector)} { background-color: ${suggestedBg}; }">Copy CSS</button>
+                  <button type="button" class="btn-xs btn-preview-fix" data-id="${issue.id}" data-selector="${escapeHtml(backgroundSelector)}" data-prop="background-color" data-val="${suggestedBg}">Preview</button>
+                  <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(backgroundSelector)} { background-color: ${suggestedBg}; }">Copy CSS</button>
                 </div>
               </div>
             `
@@ -1140,7 +1169,7 @@ async function syncPickerStateFromStorage() {
   setPickerActive(false);
 
   if (pickerState.status === "picked" && pickerState.fg && pickerState.bg) {
-    renderPickedResult(pickerState.fg, pickerState.bg);
+    renderPickedResult(pickerState);
     return;
   }
 
@@ -1468,7 +1497,7 @@ issuesList.addEventListener("click", (event) => {
   }
 
   if (event.target.classList.contains("btn-preview-fix")) {
-    const { selector, prop, val } = event.target.dataset;
+    const { id, selector, prop, val } = event.target.dataset;
     const isReverting = event.target.classList.contains("active");
 
     if (isReverting) {
@@ -1484,6 +1513,7 @@ issuesList.addEventListener("click", (event) => {
 
       void sendToContent({
         action: "previewFix",
+        id,
         selector,
         prop,
         val,

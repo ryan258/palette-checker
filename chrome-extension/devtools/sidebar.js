@@ -41,6 +41,23 @@ function getRenderedPair(fgRgb, bgRgb) {
   };
 }
 
+function getStatusBadgeClass(level) {
+  switch (level) {
+    case "AAA":
+      return "status-aaa";
+    case "AA":
+      return "status-aa";
+    case "AA Large":
+      return "status-large";
+    default:
+      return "status-fail";
+  }
+}
+
+function getScoreTone(level) {
+  return level === "Fail" ? "fail" : "pass";
+}
+
 function renderSidebar(data) {
   const content = document.getElementById("content");
   if (!data || !data.fg || !data.bg) {
@@ -59,11 +76,19 @@ function renderSidebar(data) {
   const hexFg = componentsToHex(rendered.text);
   const hexBg = componentsToHex(rendered.background);
 
-  const wcagRatio = calculateRatio(hexFg, hexBg);
-  const wcagLevel = getWCAGLevel(wcagRatio, data.fontSize, data.fontWeight);
+  const wcagRatio = getContrastRatio(hexFg, hexBg);
+  const wcagLevel = getContextualComplianceLevel(
+    wcagRatio,
+    data.fontSize,
+    data.fontWeight,
+  );
 
-  const apcaScore = calculateAPCA(hexFg, hexBg);
-  const apcaLevel = getAPCALevel(apcaScore, data.fontSize, data.fontWeight);
+  const apcaScore = calcAPCA(hexFg, hexBg);
+  const apcaLevel = getAPCAComplianceLevel(
+    apcaScore,
+    data.fontSize,
+    data.fontWeight,
+  );
 
   content.innerHTML = `
     <div class="sidebar-issue-card">
@@ -88,8 +113,8 @@ function renderSidebar(data) {
         <div class="score-group active-standard" style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px;">
           <span class="score-label" style="font-size: 11px; color: var(--text-secondary);">WCAG 2.1</span>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="score-value ${wcagRatio >= 4.5 ? "pass" : "fail"}" style="font-family: monospace; font-size: 14px; font-weight: bold;">${wcagRatio.toFixed(2)}:1</span>
-            <span class="status-badge ${wcagLevel.includes("Fail") ? "status-fail" : wcagLevel === "AAA" ? "status-aaa" : "status-aa"}" style="padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">
+            <span class="score-value ${getScoreTone(wcagLevel)}" style="font-family: monospace; font-size: 14px; font-weight: bold;">${formatContrastRatio(wcagRatio)}</span>
+            <span class="status-badge ${getStatusBadgeClass(wcagLevel)}" style="padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">
               ${wcagLevel}
             </span>
           </div>
@@ -97,8 +122,8 @@ function renderSidebar(data) {
         <div class="score-group active-standard" style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 6px;">
           <span class="score-label" style="font-size: 11px; color: var(--text-secondary);">APCA</span>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="score-value ${Math.abs(apcaScore) >= 60 ? "pass" : "fail"}" style="font-family: monospace; font-size: 14px; font-weight: bold;">Lc ${apcaScore > 0 ? "+" : ""}${Math.round(apcaScore)}</span>
-            <span class="status-badge ${apcaLevel === "Fail" ? "status-fail" : apcaLevel === "Bronze" ? "status-aa" : "status-aaa"}" style="padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">
+            <span class="score-value ${getScoreTone(apcaLevel)}" style="font-family: monospace; font-size: 14px; font-weight: bold;">${formatAPCAScore(apcaScore)}</span>
+            <span class="status-badge ${getStatusBadgeClass(apcaLevel)}" style="padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase;">
               ${apcaLevel}
             </span>
           </div>
