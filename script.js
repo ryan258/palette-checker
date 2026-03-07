@@ -38,26 +38,19 @@ let lastFocusedElement = null;
 
 // Utilities
 function generateId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
   return Math.random().toString(36).slice(2, 10);
 }
 
-/**
- * Validates a hex string
- * @param {string} hex - The hex color string
- * @returns {boolean}
- */
 function isValidHex(hex) {
   return /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(hex);
 }
 
-/**
- * Expands 3-digit hex to 6-digit hex
- * @param {string} hex - The hex color string
- * @returns {string}
- */
 function expandHex(hex) {
   if (hex.length === 4) {
     return `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
@@ -82,11 +75,6 @@ function parseHexInput(value) {
   return expandHex(hex).toLowerCase();
 }
 
-/**
- * Parses a hex color into RGB components
- * @param {string} hex - The hex color string
- * @returns {Object|null} {r, g, b} normalized to 0-1
- */
 function hexToRgb(hex) {
   if (!isValidHex(hex)) return null;
 
@@ -99,12 +87,6 @@ function hexToRgb(hex) {
   return { r, g, b };
 }
 
-/**
- * Calculates relative luminance for WCAG 2.1
- * https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
- * @param {string} hex - The hex color string
- * @returns {number} The relative luminance (0 to 1)
- */
 function getRelativeLuminance(hex) {
   const rgb = hexToRgb(hex);
   if (!rgb) return 0;
@@ -120,13 +102,6 @@ function getRelativeLuminance(hex) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/**
- * Calculates the unrounded WCAG contrast ratio between two colors.
- * https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
- * @param {string} textHex - Text color
- * @param {string} bgHex - Background color
- * @returns {number} Precise contrast ratio
- */
 function getContrastRatio(textHex, bgHex) {
   const l1 = getRelativeLuminance(textHex);
   const l2 = getRelativeLuminance(bgHex);
@@ -137,11 +112,6 @@ function getContrastRatio(textHex, bgHex) {
   return (lightest + 0.05) / (darkest + 0.05);
 }
 
-/**
- * Determines the WCAG compliance level based on precise ratio.
- * @param {number} ratio
- * @returns {string} 'AAA', 'AA', 'AA Large', or 'Fail'
- */
 function getComplianceLevel(ratio) {
   if (ratio >= 7) return "AAA";
   if (ratio >= 4.5) return "AA";
@@ -153,17 +123,10 @@ function formatContrastRatio(ratio) {
   return `${ratio.toFixed(2)}:1`;
 }
 
-// APCA 0.0.98G logic
 const APCA_RCO = 0.2126729;
 const APCA_GCO = 0.7151522;
 const APCA_BCO = 0.072175;
 
-/**
- * Calculates APCA Lightness Contrast (Lc), preserving sign and precision.
- * @param {string} textHex
- * @param {string} bgHex
- * @returns {number} Signed Lc value
- */
 function calcAPCA(textHex, bgHex) {
   const textRgb = hexToRgb(textHex);
   const bgRgb = hexToRgb(bgHex);
@@ -178,7 +141,6 @@ function calcAPCA(textHex, bgHex) {
     Math.pow(bgRgb.g, 2.4) * APCA_GCO +
     Math.pow(bgRgb.b, 2.4) * APCA_BCO;
 
-  // Soft clamp for dark colors.
   if (yTxt < 0.022) yTxt += Math.pow(0.022 - yTxt, 1.414);
   if (yBg < 0.022) yBg += Math.pow(0.022 - yBg, 1.414);
 
@@ -330,7 +292,10 @@ function getFilterModeLabel() {
 }
 
 function updateFilterLegendA11y() {
-  filterLegend.setAttribute("aria-label", `Filter combinations by ${getFilterModeLabel()} level`);
+  filterLegend.setAttribute(
+    "aria-label",
+    `Filter combinations by ${getFilterModeLabel()} level`,
+  );
   apcaInformationalToggle.title = state.apcaInformationalOnly
     ? "Uncheck to use APCA pass/fail levels for filtering."
     : "Filters currently use APCA pass/fail levels.";
@@ -444,9 +409,13 @@ function renderColorInputs() {
       wrapper.appendChild(removeBtn);
     }
 
-    wrapper.appendChild(createInputLabel(colorPickerId, `Color ${index + 1} picker`));
+    wrapper.appendChild(
+      createInputLabel(colorPickerId, `Color ${index + 1} picker`),
+    );
     wrapper.appendChild(colorInput);
-    wrapper.appendChild(createInputLabel(hexInputId, `Color ${index + 1} hex value`));
+    wrapper.appendChild(
+      createInputLabel(hexInputId, `Color ${index + 1} hex value`),
+    );
     wrapper.appendChild(hexInput);
 
     fragment.appendChild(wrapper);
@@ -464,13 +433,13 @@ function addColor() {
   if (state.colors.length >= MAX_COLORS) return;
 
   const currentHexes = state.colors.map((color) => color.hex.toLowerCase());
-  const fallbackHex =
-    `#${Math.floor(Math.random() * 16777216)
-      .toString(16)
-      .padStart(6, "0")}`;
+  const fallbackHex = `#${Math.floor(Math.random() * 16777216)
+    .toString(16)
+    .padStart(6, "0")}`;
 
   const nextHex =
-    ADD_COLOR_DEFAULTS.find((hex) => !currentHexes.includes(hex)) || fallbackHex;
+    ADD_COLOR_DEFAULTS.find((hex) => !currentHexes.includes(hex)) ||
+    fallbackHex;
 
   state.colors.push({ id: generateId(), hex: nextHex });
   renderColorInputs();
@@ -565,7 +534,10 @@ function getDialogFocusableElements() {
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     ),
   ).filter((element) => {
-    return !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true";
+    return (
+      !element.hasAttribute("disabled") &&
+      element.getAttribute("aria-hidden") !== "true"
+    );
   });
 }
 

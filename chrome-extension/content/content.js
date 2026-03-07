@@ -286,9 +286,7 @@
 
       if (el.id && el.id.startsWith("chromacheck")) continue;
       if (
-        el.closest(
-          "#chromacheck-picker-overlay, #chromacheck-picker-tooltip",
-        )
+        el.closest("#chromacheck-picker-overlay, #chromacheck-picker-tooltip")
       )
         continue;
 
@@ -355,6 +353,30 @@
     }, 3000);
 
     return true;
+  }
+
+  // --- Phase 2: Live Re-Analysis & Mutation Tracking ---
+
+  let mutationTimer = null;
+  const mutationObserver = new MutationObserver(() => {
+    if (mutationTimer) clearTimeout(mutationTimer);
+    mutationTimer = setTimeout(() => {
+      chrome.runtime.sendMessage({ action: "onPageMutation" });
+    }, 2000);
+  });
+
+  function startMutationObserver() {
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["style", "class"],
+    });
+  }
+
+  function stopMutationObserver() {
+    mutationObserver.disconnect();
   }
 
   // Element picker state
@@ -502,6 +524,16 @@
           updatedAt: Date.now(),
         },
       });
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (message.action === "startMutationObserver") {
+      startMutationObserver();
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (message.action === "stopMutationObserver") {
+      stopMutationObserver();
       sendResponse({ ok: true });
       return false;
     }

@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus MCP
 
-This project is indexed by GitNexus as **palette-checker** (182 symbols, 523 relationships, 20 execution flows).
+This project is indexed by GitNexus as **palette-checker** (187 symbols, 562 relationships, 20 execution flows).
 
 ## Always Start Here
 

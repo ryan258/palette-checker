@@ -42,9 +42,11 @@ The biggest problem with color extraction is that a flat palette loses context. 
 Chrome's popup closes on any outside click. This is hostile to a workflow where you're switching between the extension and the page. Chrome Side Panel API fixes this.
 
 - [x] **Side Panel Mode** - Primary UI now runs inside `chrome.sidePanel`, so the workspace stays open while you interact with the page.
-- [ ] **Live Re-Analysis** - When the side panel is open, automatically re-run extraction after DOM mutations (throttled via `MutationObserver`). Show a diff: "3 new issues since last scan."
-- [ ] **Scan History** - Store the last 10 scans per domain in `chrome.storage.local`. Show a timeline view. "This page had 12 contrast failures last Tuesday, now it has 4."
-- [ ] **Pin Results** - Let users pin specific element pairs to a watchlist. Pinned items persist across scans and highlight if their status changes.
+- [x] **Live Re-Analysis** - An opt-in `Auto-sync Results` setting now re-runs extraction after DOM mutations, throttled via `MutationObserver`, while the side panel stays open.
+- [x] **Scan History** - Store the last 10 scans per page in `chrome.storage.local` and restore older snapshots from the panel's history list.
+- [x] **Pin Results** - Users can pin contrast matrix rows and page issues to a persistent watchlist that survives rescans.
+- [ ] **Scan Diffs** - Compare the latest scan against the previous snapshot and summarize the delta: "3 new issues since last scan."
+- [ ] **Pinned Status Change Alerts** - Highlight pinned items when a fresh scan changes their contrast status.
 
 ---
 

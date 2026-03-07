@@ -122,6 +122,21 @@ function getAPCAComplianceLevel(lc) {
   return "Fail";
 }
 
+function getLevelRank(level) {
+  switch (level) {
+    case "Fail":
+      return 0;
+    case "AA Large":
+      return 1;
+    case "AA":
+      return 2;
+    case "AAA":
+      return 3;
+    default:
+      return 4;
+  }
+}
+
 function formatAPCAScore(lc) {
   const sign = lc > 0 ? "+" : "";
   return `Lc ${sign}${lc.toFixed(1)}`;
