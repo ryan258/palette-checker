@@ -104,6 +104,7 @@ const state = {
   pinnedItems: [],
   scanDiff: null,
   selectedIssueKeys: [],
+  expandedIssueGroupKeys: [],
   isExtracting: false,
   isFocusAuditing: false,
   isThemeAuditing: false,
@@ -292,6 +293,39 @@ function getIssueStableKey(issue) {
   );
 }
 
+function getIssueGroupKey(issue) {
+  return [
+    issue?.type || "text",
+    issue?.tagName || "",
+    issue?.foregroundProperty || "color",
+    issue?.textColor || "",
+    issue?.bgColor || "",
+    issue?.type === "text" || issue?.type === "placeholder"
+      ? issue?.fontSize || ""
+      : "",
+    issue?.type === "text" || issue?.type === "placeholder"
+      ? issue?.fontWeight || ""
+      : "",
+  ].join("|");
+}
+
+function getIssueGroupTitle(issue) {
+  switch (issue?.type) {
+    case "target-size":
+      return "Touch target size";
+    case "link-contrast":
+      return "Link distinguishability";
+    case "focus-indicator":
+      return "Focus indicator contrast";
+    case "placeholder":
+      return "Placeholder contrast";
+    case "non-text":
+      return issue?.textPreview || "Non-text contrast";
+    default:
+      return "Text contrast";
+  }
+}
+
 function normalizeSavedScan(scan) {
   if (!scan) {
     return {
@@ -340,6 +374,11 @@ function getIssueExplanation(issue) {
 
 function buildCssFixRule(option) {
   return `/* ChromaCheck fix: contrast ${formatContrastRatio(option.beforeRatio)} -> ${formatContrastRatio(option.afterRatio)} */\n${option.selector} { ${option.property}: ${option.suggestion}; }`;
+}
+
+function buildGroupedCssFixRule(option, selectors) {
+  if (!option || !selectors?.length) return "";
+  return `/* ChromaCheck fix: ${selectors.length} selectors, contrast ${formatContrastRatio(option.beforeRatio)} -> ${formatContrastRatio(option.afterRatio)} */\n${selectors.join(",\n")} {\n  ${option.property}: ${option.suggestion};\n}`;
 }
 
 function getIssueFixOptions(issue) {
@@ -548,6 +587,123 @@ function syncSelectedIssueKeys() {
   state.selectedIssueKeys = state.selectedIssueKeys.filter((key) =>
     availableKeys.has(key),
   );
+}
+
+function syncExpandedIssueGroupKeys(groups) {
+  const availableKeys = new Set(groups.map((group) => group.key));
+  state.expandedIssueGroupKeys = state.expandedIssueGroupKeys.filter((key) =>
+    availableKeys.has(key),
+  );
+}
+
+function getIssuePreviewGlyph(issue) {
+  if (issue?.type === "target-size") {
+    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>';
+  }
+  if (issue?.type === "focus-indicator") {
+    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>';
+  }
+  if (issue?.type === "link-contrast") {
+    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>';
+  }
+  if (issue?.type === "non-text") {
+    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+  }
+  return "Aa";
+}
+
+function getIssueGroupFixOptions(group) {
+  if (!group?.issues?.length) return null;
+
+  const representativeFixes = getIssueFixOptions(group.representative);
+  if (!representativeFixes) return null;
+
+  const collectSelectors = (kind) => {
+    const selectorSet = new Set();
+    group.issues.forEach((issue) => {
+      const issueFixes = getIssueFixOptions(issue);
+      const option = issueFixes?.[kind];
+      if (option?.selector) {
+        selectorSet.add(option.selector);
+      }
+    });
+    return [...selectorSet];
+  };
+
+  const decorateGroupOption = (kind, baseOption) => {
+    if (!baseOption) return null;
+    const selectors = collectSelectors(kind);
+    if (!selectors.length) return null;
+
+    return {
+      ...baseOption,
+      selectors,
+      selectorCount: selectors.length,
+      rule: buildGroupedCssFixRule(baseOption, selectors),
+    };
+  };
+
+  const text = decorateGroupOption("text", representativeFixes.text);
+  const background = decorateGroupOption(
+    "background",
+    representativeFixes.background,
+  );
+  const recommended =
+    representativeFixes.recommended?.property === "background-color"
+      ? background
+      : text;
+
+  return { text, background, recommended };
+}
+
+function buildIssueGroups(issues) {
+  const groupsByKey = new Map();
+
+  (Array.isArray(issues) ? issues : []).forEach((issue) => {
+    const key = getIssueGroupKey(issue);
+    if (!groupsByKey.has(key)) {
+      groupsByKey.set(key, {
+        key,
+        representative: issue,
+        issues: [],
+        issueKeys: [],
+        previewSamples: [],
+        previewSet: new Set(),
+      });
+    }
+
+    const group = groupsByKey.get(key);
+    const issueKey = getIssueStableKey(issue);
+    const preview = typeof issue.textPreview === "string" ? issue.textPreview : "";
+
+    group.issues.push(issue);
+    group.issueKeys.push(issueKey);
+
+    if (preview && !group.previewSet.has(preview) && group.previewSamples.length < 3) {
+      group.previewSamples.push(preview);
+    }
+    if (preview) {
+      group.previewSet.add(preview);
+    }
+  });
+
+  const selectedKeys = new Set(state.selectedIssueKeys);
+
+  return [...groupsByKey.values()].map((group) => {
+    const fixOptions = getIssueGroupFixOptions(group);
+    const selectableKeys = fixOptions?.recommended ? [...group.issueKeys] : [];
+    const selectedCount = selectableKeys.filter((key) => selectedKeys.has(key))
+      .length;
+
+    return {
+      ...group,
+      count: group.issues.length,
+      fixOptions,
+      selectableKeys,
+      selectedCount,
+      isExpanded: state.expandedIssueGroupKeys.includes(group.key),
+    };
+  });
 }
 
 function getCurrentAnalysisPairs() {
@@ -1428,6 +1584,219 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function buildIssueGroupElement(group) {
+  const issue = group.representative;
+  const apcaDetails = getAPCARecommendationDetails(issue.apcaScore);
+  const isPinned = state.pinnedItems.some(
+    (entry) =>
+      entry.type === "issue" && entry.key === getIssueStableKey(issue),
+  );
+  const isSelected =
+    group.selectableKeys.length > 0 &&
+    group.selectedCount === group.selectableKeys.length;
+  const isPartiallySelected =
+    group.selectedCount > 0 && group.selectedCount < group.selectableKeys.length;
+  const isFail =
+    state.settings.standard === "APCA"
+      ? issue.apcaLevel === "Fail"
+      : issue.wcagLevel === "Fail" || issue.wcagLevel === "AA Large";
+
+  const groupTitle = getIssueGroupTitle(issue);
+  const groupMatchLabel =
+    group.count === 1 ? "1 matching selector" : `${group.count} matching selectors`;
+  const previewLabel = group.previewSamples.length
+    ? `Examples: ${group.previewSamples
+        .map((preview) => `"${preview}"`)
+        .join(", ")}${group.previewSet.size > group.previewSamples.length ? ` +${group.previewSet.size - group.previewSamples.length} more` : ""}`
+    : groupMatchLabel;
+  const toggleLabel = group.isExpanded
+    ? "Hide selectors"
+    : `Show ${group.count === 1 ? "selector" : `${group.count} selectors`}`;
+  const queueLabel = !group.selectableKeys.length
+    ? "Batch"
+    : isSelected
+      ? `Queued ${group.selectedCount}`
+      : isPartiallySelected
+        ? `Queued ${group.selectedCount}/${group.selectableKeys.length}`
+        : group.selectableKeys.length > 1
+          ? `Queue ${group.selectableKeys.length}`
+          : "Batch";
+
+  const row = document.createElement("article");
+  row.className = "issue-group";
+  row.dataset.groupKey = group.key;
+
+  row.innerHTML = `
+    <div class="issue-row-main">
+      <div class="combo-preview-mini" style="background:${issue.bgColor};color:${issue.textColor};">
+        ${getIssuePreviewGlyph(issue)}
+      </div>
+      <div class="issue-info">
+        <div class="issue-group-topline">
+          <strong class="issue-group-title">${escapeHtml(groupTitle)}</strong>
+          <span class="issue-group-count">${groupMatchLabel}</span>
+        </div>
+        <div class="issue-meta">
+          <span class="issue-tag">${escapeHtml(issue.tagName)}</span>
+          ${issue.type === "text" || issue.type === "placeholder" ? `<span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>` : ""}
+          <span class="issue-polarity">${escapeHtml(apcaDetails.polarity.label)}</span>
+          ${issue.textColorToken ? `<span class="issue-token" title="Foreground: ${issue.textColor}">${escapeHtml(issue.textColorToken)}</span>` : ""}
+          ${issue.bgColorToken ? `<span class="issue-token" title="Background: ${issue.bgColor}">${escapeHtml(issue.bgColorToken)}</span>` : ""}
+        </div>
+        <div class="issue-group-preview">${escapeHtml(previewLabel)}</div>
+        <div class="combo-scores">
+          <div class="score-group ${state.settings.standard === "APCA" ? "inactive-standard" : "active-standard"}">
+            <span class="score-label">WCAG</span>
+            <span class="score-value ${getScoreTone(issue.wcagLevel)}">${formatContrastRatio(issue.wcagRatio)}</span>
+            <span class="status-badge ${getStatusBadgeClass(issue.wcagLevel)}">${issue.wcagLevel}</span>
+          </div>
+          <div class="score-group ${state.settings.standard === "APCA" ? "active-standard" : "inactive-standard"}">
+            <span class="score-label">APCA</span>
+            <span class="score-value ${getScoreTone(issue.apcaLevel)}">${formatAPCAScore(issue.apcaScore)}</span>
+            <span class="status-badge ${getStatusBadgeClass(issue.apcaLevel)}">${issue.apcaLevel}</span>
+          </div>
+        </div>
+        <div class="issue-explainer">${escapeHtml(getIssueExplanation(issue))}</div>
+      </div>
+      <div class="issue-actions">
+        <button
+          type="button"
+          class="btn-xs btn-select-issue btn-select-group ${isSelected ? "active" : ""} ${isPartiallySelected ? "partial" : ""}"
+          data-group-key="${escapeHtml(group.key)}"
+          ${group.selectableKeys.length ? "" : "disabled"}
+        >
+          ${queueLabel}
+        </button>
+        <button
+          type="button"
+          class="btn-icon btn-pin ${isPinned ? "active" : ""}"
+          title="${isPinned ? "Unpin result" : "Pin result"}"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="btn-xs btn-toggle-issue-group"
+          data-group-key="${escapeHtml(group.key)}"
+          aria-expanded="${group.isExpanded ? "true" : "false"}"
+        >
+          ${toggleLabel}
+        </button>
+      </div>
+    </div>
+  `;
+
+  if (isFail && group.fixOptions) {
+    const optionsHtml = [group.fixOptions.text, group.fixOptions.background]
+      .filter(Boolean)
+      .map((option) => {
+        const label =
+          option.property === (issue.foregroundProperty || "color")
+            ? "Change foreground"
+            : "Change background";
+        const recommendation =
+          group.fixOptions.recommended?.property === option.property
+            ? " Recommended"
+            : "";
+
+        return `
+          <div class="fix-option">
+            <div>
+              <div class="fix-desc">${label} to <strong>${option.suggestion.toUpperCase()}</strong>${recommendation}</div>
+              <div class="fix-meta">${option.selectorCount} selectors · ${formatContrastRatio(option.beforeRatio)} -> ${formatContrastRatio(option.afterRatio)}</div>
+            </div>
+            <div class="fix-actions">
+              <button type="button" class="btn-xs btn-preview-fix" data-id="" data-selector="${escapeHtml(option.selectors.join(", "))}" data-prop="${escapeHtml(option.property)}" data-val="${option.suggestion}">Preview</button>
+              <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(option.rule)}">Copy CSS</button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+    const githubFixLines = [group.fixOptions.text, group.fixOptions.background]
+      .filter(Boolean)
+      .map(
+        (option) =>
+          `- \`${option.selectorCount} selectors { ${option.property}: ${option.suggestion}; }\``,
+      )
+      .join("\n");
+    const affectedSelectorLines = group.issues
+      .slice(0, 10)
+      .map((member) => `- \`${member.selector}\``)
+      .join("\n");
+
+    row.innerHTML += `
+      <div class="issue-fix-suggestion">
+        <div class="fix-header">Actionable Fixes</div>
+        <div class="fix-options">
+          ${optionsHtml}
+          <div class="fix-option fix-option-apca">
+            <span class="fix-desc">APCA ${escapeHtml(apcaDetails.tier)} guidance: <strong>${escapeHtml(apcaDetails.minimumText)}</strong></span>
+          </div>
+        </div>
+        ${
+          state.settings.githubRepoUrl
+            ? `
+        <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; display: flex; justify-content: flex-end;">
+          <a href="${state.settings.githubRepoUrl.replace(
+            /\/$/,
+            "",
+          )}/issues/new?title=${encodeURIComponent(
+            `[a11y] ${groupTitle} affecting ${group.count} selectors`,
+          )}&body=${encodeURIComponent(
+            `**WCAG Score:** ${formatContrastRatio(issue.wcagRatio)} (${issue.wcagLevel})\n**APCA Score:** ${formatAPCAScore(issue.apcaScore)} (${issue.apcaLevel})\n**Representative Selector:** \`${issue.selector}\`\n**Affected Selectors:** ${group.count}\n\n${affectedSelectorLines}${group.count > 10 ? `\n- ...and ${group.count - 10} more` : ""}\n\n**Current Value:**\n- Text: \`${issue.textColor}\`\n- Background: \`${issue.bgColor}\`\n\n**Suggested Fixes:**\n${githubFixLines}\n\n**Impact:** ${getIssueExplanation(issue)}`,
+          )}" target="_blank" class="btn-xs" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+            Create Issue
+          </a>
+        </div>`
+            : ""
+        }
+      </div>
+    `;
+  }
+
+  const pinButton = row.querySelector(".btn-pin");
+  if (pinButton) {
+    const issueKey = getIssueStableKey(issue);
+    pinButton.dataset.key = issueKey;
+    pinButton.dataset.selector = issue.selector;
+    pinButton.dataset.fg = issue.textColor;
+    pinButton.dataset.bg = issue.bgColor;
+    pinButton.dataset.ratio = String(issue.wcagRatio);
+    pinButton.dataset.level = issue.wcagLevel;
+    pinButton.dataset.wcagLevel = issue.wcagLevel;
+    pinButton.dataset.apcaLevel = issue.apcaLevel;
+    pinButton.dataset.apcaScore = String(issue.apcaScore);
+  }
+
+  const body = document.createElement("div");
+  body.className = "issue-group-body";
+  body.hidden = !group.isExpanded;
+  body.innerHTML = `
+    <div class="issue-group-list">
+      ${group.issues
+        .map(
+          (member) => `
+            <button type="button" class="issue-example" data-issue-id="${member.id}">
+              <div class="issue-example-main">
+                <code class="issue-selector">${escapeHtml(member.selector)}</code>
+                <span class="issue-example-preview">${escapeHtml(member.textPreview || member.tagName)}</span>
+              </div>
+              <span class="issue-example-action">Highlight</span>
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+  row.appendChild(body);
+
+  return row;
+}
+
 function getIssueSummary() {
   return summarizeIssueList(state.issues, state.settings);
 }
@@ -1446,12 +1815,14 @@ function renderIssues() {
   }
 
   syncSelectedIssueKeys();
+  const issueGroups = buildIssueGroups(state.issues);
+  syncExpandedIssueGroupKeys(issueGroups);
   issuesSection.style.display = "";
   const summary = getIssueSummary();
   const problemCount = summary.fails + summary.warnings;
   issuesCount.textContent = problemCount
-    ? `${problemCount} failing of ${summary.total} elements`
-    : `${summary.total} elements — all passing`;
+    ? `${issueGroups.length} groups · ${problemCount} failing of ${summary.total} elements`
+    : `${issueGroups.length} groups · ${summary.total} elements — all passing`;
   batchCount.textContent = state.selectedIssueKeys.length
     ? `${state.selectedIssueKeys.length} queued`
     : "";
@@ -1460,165 +1831,8 @@ function renderIssues() {
 
   const fragment = document.createDocumentFragment();
 
-  state.issues.forEach((issue) => {
-    const issueKey = getIssueStableKey(issue);
-    const fixOptions = getIssueFixOptions(issue);
-    const apcaDetails = getAPCARecommendationDetails(issue.apcaScore);
-    const isSelected = state.selectedIssueKeys.includes(issueKey);
-    const row = document.createElement("article");
-    row.className = "issue-row";
-    row.dataset.issueId = issue.id;
-    row.dataset.issueKey = issueKey;
-    row.setAttribute("role", "button");
-    row.setAttribute("tabindex", "0");
-    row.setAttribute(
-      "aria-label",
-      `${issue.wcagLevel}: ${issue.selector} — ${issue.textPreview}`,
-    );
-
-    const isPinned = state.pinnedItems.some(
-      (p) => p.type === "issue" && p.key === issueKey,
-    );
-
-    row.innerHTML = `
-      <div class="issue-row-main">
-        <div class="combo-preview-mini" style="background:${issue.bgColor};color:${issue.textColor};">
-          ${
-            issue.type === "target-size"
-              ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>'
-              : issue.type === "focus-indicator"
-                ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="7" y="7" width="10" height="10" rx="1"></rect></svg>'
-                : issue.type === "link-contrast"
-                  ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>'
-                  : issue.type === "non-text"
-                    ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
-                    : "Aa"
-          }
-        </div>
-        <div class="issue-info">
-          <code class="issue-selector">${escapeHtml(issue.selector)}</code>
-          <div class="issue-meta">
-            <span class="issue-tag">${escapeHtml(issue.tagName)}</span>
-            ${issue.type === "text" || issue.type === "placeholder" ? `<span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>` : ""}
-            <span class="issue-polarity">${escapeHtml(apcaDetails.polarity.label)}</span>
-            <span class="issue-text-preview">${escapeHtml(issue.textPreview)}</span>
-            ${issue.textColorToken ? `<span class="issue-token" title="Foreground: ${issue.textColor}">${escapeHtml(issue.textColorToken)}</span>` : ""}
-            ${issue.bgColorToken ? `<span class="issue-token" title="Background: ${issue.bgColor}">${escapeHtml(issue.bgColorToken)}</span>` : ""}
-          </div>
-          <div class="combo-scores">
-            <div class="score-group ${state.settings.standard === "APCA" ? "inactive-standard" : "active-standard"}">
-              <span class="score-label">WCAG</span>
-              <span class="score-value ${getScoreTone(issue.wcagLevel)}">${formatContrastRatio(issue.wcagRatio)}</span>
-              <span class="status-badge ${getStatusBadgeClass(issue.wcagLevel)}">${issue.wcagLevel}</span>
-            </div>
-            <div class="score-group ${state.settings.standard === "APCA" ? "active-standard" : "inactive-standard"}">
-              <span class="score-label">APCA</span>
-              <span class="score-value ${getScoreTone(issue.apcaLevel)}">${formatAPCAScore(issue.apcaScore)}</span>
-              <span class="status-badge ${getStatusBadgeClass(issue.apcaLevel)}">${issue.apcaLevel}</span>
-            </div>
-          </div>
-          <div class="issue-explainer">${escapeHtml(getIssueExplanation(issue))}</div>
-        </div>
-        <div class="issue-actions">
-          <button type="button" class="btn-xs btn-select-issue ${isSelected ? "active" : ""}" data-key="${escapeHtml(issueKey)}" ${fixOptions?.recommended ? "" : "disabled"}>
-            ${isSelected ? "Queued" : "Batch"}
-          </button>
-          <button type="button" class="btn-icon btn-pin ${isPinned ? "active" : ""}" title="${isPinned ? "Unpin result" : "Pin result"}">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
-            </svg>
-          </button>
-        </div>
-      </div>
-    `;
-
-    const isFail =
-      state.settings.standard === "APCA"
-        ? issue.apcaLevel === "Fail"
-        : issue.wcagLevel === "Fail" || issue.wcagLevel === "AA Large";
-
-    if (isFail && fixOptions) {
-      const optionsHtml = [fixOptions.text, fixOptions.background]
-        .filter(Boolean)
-        .map((option) => {
-          const label =
-            option.property === (issue.foregroundProperty || "color")
-              ? "Change foreground"
-              : "Change background";
-          const recommendation =
-            fixOptions.recommended?.property === option.property
-              ? " Recommended"
-              : "";
-          return `
-            <div class="fix-option">
-              <div>
-                <div class="fix-desc">${label} to <strong>${option.suggestion.toUpperCase()}</strong>${recommendation}</div>
-                <div class="fix-meta">${formatContrastRatio(option.beforeRatio)} -> ${formatContrastRatio(option.afterRatio)}</div>
-              </div>
-              <div class="fix-actions">
-                <button type="button" class="btn-xs btn-preview-fix" data-id="${issue.id}" data-selector="${escapeHtml(option.selector)}" data-prop="${escapeHtml(option.property)}" data-val="${option.suggestion}">Preview</button>
-                <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(option.rule)}">Copy CSS</button>
-              </div>
-            </div>
-          `;
-        })
-        .join("");
-
-      const githubFixLines = [fixOptions.text, fixOptions.background]
-        .filter(Boolean)
-        .map(
-          (option) =>
-            `- \`${option.selector} { ${option.property}: ${option.suggestion}; }\``,
-        )
-        .join("\n");
-      const fixHtml = `
-        <div class="issue-fix-suggestion">
-          <div class="fix-header">Actionable Fixes</div>
-          <div class="fix-options">
-            ${optionsHtml}
-            <div class="fix-option fix-option-apca">
-              <span class="fix-desc">APCA ${escapeHtml(apcaDetails.tier)} guidance: <strong>${escapeHtml(apcaDetails.minimumText)}</strong></span>
-            </div>
-          </div>
-          ${
-            state.settings.githubRepoUrl
-              ? `
-          <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; display: flex; justify-content: flex-end;">
-            <a href="${state.settings.githubRepoUrl.replace(
-              /\/$/,
-              "",
-            )}/issues/new?title=${encodeURIComponent(
-              `[a11y] Contrast failure on ${issue.tagName} element`,
-            )}&body=${encodeURIComponent(
-              `**WCAG Score:** ${formatContrastRatio(issue.wcagRatio)} (${issue.wcagLevel})\n**APCA Score:** ${formatAPCAScore(issue.apcaScore)} (${issue.apcaLevel})\n**Selector:** \`${issue.selector}\`\n\n**Current Value:**\n- Text: \`${issue.textColor}\`\n- Background: \`${issue.bgColor}\`\n\n**Suggested Fixes:**\n${
-                githubFixLines
-              }\n\n**Impact:** ${getIssueExplanation(issue)}`,
-            )}" target="_blank" class="btn-xs" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-              Create Issue
-            </a>
-          </div>`
-              : ""
-          }
-        </div>
-      `;
-      row.innerHTML += fixHtml;
-    }
-
-    const pinButton = row.querySelector(".btn-pin");
-    if (pinButton) {
-      pinButton.dataset.key = issueKey;
-      pinButton.dataset.selector = issue.selector;
-      pinButton.dataset.fg = issue.textColor;
-      pinButton.dataset.bg = issue.bgColor;
-      pinButton.dataset.ratio = String(issue.wcagRatio);
-      pinButton.dataset.level = issue.wcagLevel;
-      pinButton.dataset.wcagLevel = issue.wcagLevel;
-      pinButton.dataset.apcaLevel = issue.apcaLevel;
-      pinButton.dataset.apcaScore = String(issue.apcaScore);
-    }
-
-    fragment.appendChild(row);
+  issueGroups.forEach((group) => {
+    fragment.appendChild(buildIssueGroupElement(group));
   });
 
   issuesList.appendChild(fragment);
@@ -2237,6 +2451,31 @@ combinationsGrid.addEventListener("click", (e) => {
 issuesList.addEventListener("click", (event) => {
   const selectBtn = event.target.closest(".btn-select-issue");
   if (selectBtn) {
+    const groupKey = selectBtn.dataset.groupKey;
+    if (groupKey) {
+      const group = buildIssueGroups(state.issues).find(
+        (entry) => entry.key === groupKey,
+      );
+      if (!group?.selectableKeys.length) return;
+
+      const allSelected = group.selectableKeys.every((key) =>
+        state.selectedIssueKeys.includes(key),
+      );
+
+      if (allSelected) {
+        state.selectedIssueKeys = state.selectedIssueKeys.filter(
+          (key) => !group.selectableKeys.includes(key),
+        );
+      } else {
+        const nextKeys = new Set(state.selectedIssueKeys);
+        group.selectableKeys.forEach((key) => nextKeys.add(key));
+        state.selectedIssueKeys = [...nextKeys];
+      }
+
+      renderIssues();
+      return;
+    }
+
     const key = selectBtn.dataset.key;
     if (!key) return;
     const index = state.selectedIssueKeys.indexOf(key);
@@ -2279,10 +2518,6 @@ issuesList.addEventListener("click", (event) => {
     return;
   }
 
-  const row = event.target.closest(".issue-row");
-  if (!row) return;
-
-  // Handle fix action clicks specifically without triggering the highlight
   if (event.target.classList.contains("btn-copy-fix")) {
     const rule = event.target.dataset.rule;
     void copyPayloadToClipboard(rule, "CSS fix");
@@ -2317,7 +2552,28 @@ issuesList.addEventListener("click", (event) => {
     return;
   }
 
-  const id = row.dataset.issueId;
+  const toggleGroupBtn = event.target.closest(".btn-toggle-issue-group");
+  if (toggleGroupBtn) {
+    const groupKey = toggleGroupBtn.dataset.groupKey;
+    if (!groupKey) return;
+
+    if (state.expandedIssueGroupKeys.includes(groupKey)) {
+      state.expandedIssueGroupKeys = state.expandedIssueGroupKeys.filter(
+        (key) => key !== groupKey,
+      );
+    } else {
+      state.expandedIssueGroupKeys = [
+        ...state.expandedIssueGroupKeys,
+        groupKey,
+      ];
+    }
+
+    renderIssues();
+    return;
+  }
+
+  const exampleBtn = event.target.closest(".issue-example");
+  const id = exampleBtn?.dataset.issueId;
   if (id !== undefined) {
     void sendToContent({ action: "highlightElement", id });
   }
@@ -2341,17 +2597,6 @@ batchCopyBtn.addEventListener("click", () => {
 batchClearBtn.addEventListener("click", () => {
   state.selectedIssueKeys = [];
   renderIssues();
-});
-
-issuesList.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  const row = event.target.closest(".issue-row");
-  if (!row) return;
-  event.preventDefault();
-  const id = row.dataset.issueId;
-  if (id !== undefined) {
-    void sendToContent({ action: "highlightElement", id });
-  }
 });
 
 filterLegend.addEventListener("click", (event) => {

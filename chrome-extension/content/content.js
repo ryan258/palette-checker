@@ -35,7 +35,18 @@
     return match !== null && parseFloat(match[1]) === 0;
   }
 
+  function isChromaCheckOwnedNode(node) {
+    if (!node) return false;
+    if (node.nodeType === Node.TEXT_NODE) {
+      return isChromaCheckOwnedNode(node.parentElement);
+    }
+    if (!(node instanceof Element)) return false;
+    if (node.id?.startsWith("chromacheck")) return true;
+    return Boolean(node.closest('[id^="chromacheck"]'));
+  }
+
   function isVisible(el) {
+    if (isChromaCheckOwnedNode(el)) return false;
     const style = window.getComputedStyle(el);
     return (
       style.display !== "none" &&
@@ -122,6 +133,7 @@
   }
 
   function isContentVisible(el) {
+    if (isChromaCheckOwnedNode(el)) return false;
     const style = window.getComputedStyle(el);
     if (style.display === "none") return false;
     if (style.visibility === "hidden") return false;
@@ -379,17 +391,10 @@
 
     function walkNodes(rootNode) {
       if (rootNode.nodeType === Node.ELEMENT_NODE) {
+        if (isChromaCheckOwnedNode(rootNode)) return;
         if (rootNode.shadowRoot) {
           walkNodes(rootNode.shadowRoot);
         }
-        if (rootNode.id && rootNode.id.startsWith("chromacheck")) return;
-        if (
-          rootNode.closest &&
-          rootNode.closest(
-            "#chromacheck-picker-overlay, #chromacheck-picker-tooltip",
-          )
-        )
-          return;
       }
 
       for (const node of rootNode.childNodes) {
