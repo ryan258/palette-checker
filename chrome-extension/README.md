@@ -46,15 +46,37 @@ The popup loads ES modules directly. The bundled content script in `content/cont
 chrome-extension/
 |-- manifest.json              # Manifest V3 configuration
 |-- background.js              # Service worker (enables side panel)
+|-- build.sh                   # Bundles content/ modules into content/content.js
 |-- content/
-|   |-- index.js               # Content-script entrypoint source
-|   +-- content.js             # Bundled content script loaded by the manifest
+|   |-- index.js               # Content-script entrypoint (imports modules)
+|   |-- content.js             # Bundled content script loaded by the manifest
+|   |-- extraction.js          # Color extraction, element-pair detection, element tracking
+|   |-- picker.js              # Element inspector overlay, hover/click handling
+|   |-- simulation.js          # CVD filter injection, low vision CSS, highlight
+|   |-- focus-audit.js         # Programmatic focus audit, focus style diffing
+|   |-- theme-audit.js         # Theme detection, variant testing
+|   |-- dom-utils.js           # Visibility checks, shadow DOM, background compositing
+|   |-- color-utils.js         # Color conversion helpers (RGB, RGBA, hex)
+|   |-- mutation.js            # MutationObserver setup and debounced notifications
+|   +-- message-handler.js     # chrome.runtime.onMessage dispatch to modules
 |-- shared/
 |   +-- contrast.js            # Pure contrast math (WCAG, APCA, CVD, fixes)
 |-- popup/
 |   |-- popup.html             # Side panel UI
-|   |-- index.js               # Side panel entrypoint
 |   |-- popup.css              # Dark theme design system
+|   |-- index.js               # Side panel entrypoint (imports modules)
+|   |-- state.js               # Application state object
+|   |-- events.js              # Event handlers and delegation
+|   |-- actions.js             # Action workflows (scan, picker, audits)
+|   |-- render.js              # UI rendering functions
+|   |-- analysis.js            # Worker management, recomputeAnalysis()
+|   |-- storage.js             # Persistence (history, pins, settings)
+|   |-- sync.js                # Tab/workspace synchronization
+|   |-- utils.js               # Issue grouping, escaping, formatting
+|   |-- messaging.js           # Chrome messaging helpers
+|   |-- dom-elements.js        # Cached DOM element references
+|   |-- clipboard.js           # Clipboard write helpers
+|   |-- constants.js           # Shared constants and labels
 |   +-- analysis-worker.js     # Web Worker for off-thread calculations
 |-- devtools/
 |   |-- devtools.html          # DevTools page bootstrap
@@ -69,18 +91,20 @@ chrome-extension/
 ## Architecture
 
 ```
-Side Panel / DevTools Panel          -- UI & state management
+Side Panel (ES modules)              -- UI, state, event handling, rendering
         |
    Analysis Worker                   -- Off-thread contrast calculations
         |
    shared/contrast.js                -- Pure functions (WCAG, APCA, CVD, fixes)
         |
-   Content Script                    -- DOM walking, color extraction, simulations
+   Content Script (bundled)          -- DOM walking, color extraction, simulations
         |
    Background Service Worker         -- Side panel activation
 ```
 
 The side panel sends messages to the content script to analyze the page. Raw color data flows back through an analysis worker that computes all combinations and issues using the shared contrast library. No external dependencies touch the page.
+
+The popup loads ES modules directly (no bundling needed). The content script modules under `content/` are bundled into `content/content.js` via `./build.sh` -- only re-run after changing content script source files.
 
 ## Running Tests
 

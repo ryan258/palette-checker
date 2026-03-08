@@ -10,52 +10,54 @@ For completed work, see [CHANGELOG.md](CHANGELOG.md).
 
 ## Current State
 
-The extension has a working scan-to-fix pipeline: extract page colors, detect real element pairs, calculate WCAG and APCA scores, suggest fixes, preview them live, and copy CSS. It also has CVD simulation, focus indicator auditing, theme auditing, scan history, pinning, and DevTools integration.
+The extension has a complete scan-to-fix pipeline: extract page colors, detect real element pairs, calculate WCAG and APCA scores, suggest fixes, preview them live, and copy CSS. It also has CVD simulation (8 types), low vision simulation, focus indicator auditing, theme auditing, scan history with diffing, domain comparison, pinned watchlist, batch fix mode, issue filtering by WCAG level, and DevTools integration (panel + Elements sidebar pane).
 
 The core engine (`shared/contrast.js`) is solid. The DOM analysis in `content/content.js` handles real-world complexity well -- shadow DOM, opacity inheritance, semi-transparent compositing.
 
-The problem is structural. The two main files (`popup.js` at 2,400 lines and `content.js` at 1,900 lines) are monoliths. Test coverage only reaches the pure math layer. Features have spread wide but thin. The roadmap below focuses on depth, reliability, and maintainability before any new features.
+**Modularization is complete.** Both the content script and the popup have been split into focused single-responsibility modules. The content script modules are bundled into `content/content.js` via `build.sh`. The popup modules load as ES modules directly. Test coverage still only reaches the pure math layer -- DOM integration tests are the next structural priority.
 
 ---
 
-## Priority 1: Modularize the Codebase
+## Priority 1: Modularize the Codebase -- COMPLETE
 
 **Goal: Make every future change cheaper.**
 
-Both `popup.js` and `content.js` do too many unrelated things in single files. Every bug fix and feature touches code it shouldn't need to touch.
-
-### content.js -> modules
+### content.js -> modules -- Done
 
 Split into focused, single-responsibility modules:
 
-- [ ] `content/extraction.js` -- `extractColors()`, `extractElementPairs()`, color counting, token map building
-- [ ] `content/picker.js` -- Overlay creation, hover/click handling, picker state management
-- [ ] `content/simulation.js` -- CVD filter injection, low vision CSS, split-view iframe, toolbar, keyboard shortcuts
-- [ ] `content/focus-audit.js` -- `auditFocusIndicators()`, focus style diffing
-- [ ] `content/theme-audit.js` -- `detectThemeCandidates()`, `applyThemeCandidate()`, `auditThemes()`
-- [ ] `content/dom-utils.js` -- `isVisible()`, `isContentVisible()`, `queryAllDeep()`, `getMinimalSelector()`, `buildRenderChain()`, `getRenderedPair()`
-- [ ] `content/message-handler.js` -- `chrome.runtime.onMessage` listener, dispatch to modules
-- [ ] `content/mutation.js` -- MutationObserver setup, external mutation filtering, debounced notification
+- [x] `content/extraction.js` -- `extractColors()`, `extractElementPairs()`, color counting, token map building
+- [x] `content/picker.js` -- Overlay creation, hover/click handling, picker state management
+- [x] `content/simulation.js` -- CVD filter injection, low vision CSS, highlight, fix preview
+- [x] `content/focus-audit.js` -- `auditFocusIndicators()`, focus style diffing
+- [x] `content/theme-audit.js` -- `detectThemeCandidates()`, `applyThemeCandidate()`, `auditThemes()`
+- [x] `content/dom-utils.js` -- `isVisible()`, `isContentVisible()`, `queryAllDeep()`, `getMinimalSelector()`, `buildRenderChain()`, `getRenderedPair()`
+- [x] `content/color-utils.js` -- Color conversion helpers (RGB, RGBA, hex)
+- [x] `content/message-handler.js` -- `chrome.runtime.onMessage` listener, dispatch to modules
+- [x] `content/mutation.js` -- MutationObserver setup, external mutation filtering, debounced notification
 
-### popup.js -> modules
+### popup.js -> modules -- Done
 
 Split the UI layer:
 
-- [ ] `popup/state.js` -- State object, storage read/write, settings management
-- [ ] `popup/storage.js` -- Analysis history, pinned items, scan diffing, domain comparison
-- [ ] `popup/render-issues.js` -- Issue groups, fix options, batch selection, group expand/collapse
-- [ ] `popup/render-palette.js` -- Color swatches, combination matrix, filter toggles
-- [ ] `popup/render-chrome.js` -- Page context, metrics, empty state, status banner, settings popover
-- [ ] `popup/analysis.js` -- Worker management, `recomputeAnalysis()`, `runAnalysisWorker()`
-- [ ] `popup/event-handlers.js` -- Button listeners, delegation, picker sync, tab change handling
+- [x] `popup/state.js` -- Application state object
+- [x] `popup/events.js` -- Event handlers and delegation
+- [x] `popup/actions.js` -- Action workflows (scan, picker, focus audit, theme audit)
+- [x] `popup/render.js` -- All UI rendering functions
+- [x] `popup/analysis.js` -- Worker management, `recomputeAnalysis()`, `runAnalysisWorker()`
+- [x] `popup/storage.js` -- Analysis history, pinned items, settings persistence
+- [x] `popup/sync.js` -- Tab/workspace synchronization, picker state sync
+- [x] `popup/utils.js` -- Issue grouping, escaping, formatting, explanation text
+- [x] `popup/messaging.js` -- Chrome messaging helpers and error handling
+- [x] `popup/dom-elements.js` -- Cached DOM element references
+- [x] `popup/clipboard.js` -- Clipboard write helpers
+- [x] `popup/constants.js` -- Shared constants and labels
 
-### Build step
+### Build step -- Done
 
-Modularization requires a minimal build step to bundle modules back into single files for the extension:
-
-- [ ] Add a lightweight bundler (esbuild or rollup) with no runtime dependencies in the output
-- [ ] Preserve the zero-dependency, no-transpilation principle -- bundle only, no transforms
-- [ ] Output the same file structure the manifest expects
+- [x] `build.sh` bundles content modules into `content/content.js` using esbuild (bundle-only, no transforms)
+- [x] Popup modules load as ES modules directly -- no bundling needed
+- [x] Zero runtime dependencies in the output
 
 ---
 
@@ -99,7 +101,7 @@ Several features are implemented thinly enough that they mislead users or contri
 
 ### Downgrade or rework
 
-- [ ] **Contrast matrix** -- Demote to a collapsed "Advanced" section. Element-pair issues are the primary view; the theoretical all-combinations matrix adds noise and splits attention.
+- [x] **Contrast matrix** -- Moved below page issues in the UI. Element-pair issues are now the primary view. Matrix has its own filter legend and count indicator.
 - [ ] **Split-screen comparison** -- Document the CSP/X-Frame-Options limitation prominently. Consider removing entirely if it can't work on most production sites. Evaluate using a canvas-based approach instead of iframe mirroring.
 - [ ] **Low vision simulation** -- Add a disclaimer that these are rough CSS approximations, not clinically calibrated simulations. Consider labeling as "preview" quality.
 - [ ] **Theme audit** -- Document that it only works for class/attribute-based theme toggles. JS-driven themes, SSR-rendered themes, and `prefers-color-scheme` media queries (as opposed to the `color-scheme` CSS property) are not supported.

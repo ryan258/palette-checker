@@ -76,10 +76,12 @@ Unlike broad accessibility scanners (Lighthouse, axe), ChromaCheck focuses exclu
 ```
 +---------------------------------------------------------------+
 |              UI Layer (Side Panel & DevTools)                  |
-|  popup.js         sidebar.js         devtools.js              |
-|  - State mgmt     - Element inspect   - Panel bootstrap       |
-|  - Rendering       - Computed styles   - Reuses popup.html    |
-|  - Settings/history                                           |
+|  popup/ (ES modules)     devtools/                            |
+|  - state.js              - sidebar.js (element inspect)       |
+|  - events.js             - devtools.js (panel bootstrap)      |
+|  - actions.js            - Reuses popup.html                  |
+|  - render.js                                                  |
+|  - sync.js, storage.js, utils.js, messaging.js                |
 +---------------------------------------------------------------+
 |              Analysis Layer (Web Worker)                       |
 |  analysis-worker.js                                           |
@@ -93,10 +95,11 @@ Unlike broad accessibility scanners (Lighthouse, axe), ChromaCheck focuses exclu
 |  - No DOM, no state, portable       - CommonJS-exportable    |
 +---------------------------------------------------------------+
 |              Page Interaction Layer (Content Script)           |
-|  content/content.js                                           |
-|  - DOM walking & color extraction   - Shadow DOM piercing    |
-|  - Background compositing           - SVG filter injection   |
-|  - Element tracking                 - Theme detection        |
+|  content/ (bundled into content.js via build.sh)              |
+|  - extraction.js (DOM walk, pairs)  - simulation.js (CVD)    |
+|  - focus-audit.js                   - theme-audit.js          |
+|  - picker.js                        - mutation.js             |
+|  - dom-utils.js, color-utils.js     - message-handler.js     |
 +---------------------------------------------------------------+
 |              Service Worker (Minimal)                          |
 |  background.js                                                |
@@ -126,9 +129,9 @@ Data flows top-down: the UI sends analysis requests via Chrome messaging to the 
 
 Gecko metadata is present in the manifest, but the side-panel and DevTools workflow should be validated in the specific Firefox version you plan to support.
 
-### No Build Step Required
+### Build Step
 
-The extension ships as raw JavaScript with zero npm dependencies. No transpilation, bundling, or compilation is needed.
+The popup loads ES modules directly -- no bundling needed. The content script modules under `content/` are bundled into `content/content.js` via `./build.sh` (esbuild, bundle-only, no transforms). Re-run `build.sh` after changing any file under `content/`. Zero npm dependencies in the output.
 
 ### Running Tests
 
@@ -145,15 +148,38 @@ node --test tests/contrast.test.js
 chrome-extension/
 |-- manifest.json                 # Extension configuration
 |-- background.js                 # Service worker
+|-- build.sh                      # Bundles content/ modules into content/content.js
 |-- ROADMAP.md                    # Feature roadmap & phase tracking
 |-- content/
-|   +-- content.js                # Page analysis & DOM interaction
+|   |-- index.js                  # Content-script entrypoint (imports modules)
+|   |-- content.js                # Bundled content script (output of build.sh)
+|   |-- extraction.js             # Color extraction, element-pair detection, tracking
+|   |-- picker.js                 # Element inspector overlay, hover/click
+|   |-- simulation.js             # CVD filter injection, low vision, highlight, preview
+|   |-- focus-audit.js            # Programmatic focus audit, focus style diffing
+|   |-- theme-audit.js            # Theme detection and variant testing
+|   |-- dom-utils.js              # Visibility, shadow DOM, background compositing
+|   |-- color-utils.js            # Color conversion helpers (RGB, RGBA, hex)
+|   |-- mutation.js               # MutationObserver, debounced notifications
+|   +-- message-handler.js        # chrome.runtime.onMessage dispatch
 |-- shared/
 |   +-- contrast.js               # Pure contrast calculation library
 |-- popup/
 |   |-- popup.html                # Side panel UI template
-|   |-- popup.js                  # Side panel logic & state
 |   |-- popup.css                 # Styling & design system
+|   |-- index.js                  # Side panel entrypoint (imports modules)
+|   |-- state.js                  # Application state object
+|   |-- events.js                 # Event handlers and delegation
+|   |-- actions.js                # Scan, picker, focus audit, theme audit workflows
+|   |-- render.js                 # UI rendering functions
+|   |-- analysis.js               # Worker management, recomputeAnalysis()
+|   |-- storage.js                # Persistence (history, pins, settings)
+|   |-- sync.js                   # Tab/workspace synchronization
+|   |-- utils.js                  # Issue grouping, escaping, formatting
+|   |-- messaging.js              # Chrome messaging helpers
+|   |-- dom-elements.js           # Cached DOM element references
+|   |-- clipboard.js              # Clipboard write helpers
+|   |-- constants.js              # Shared constants and labels
 |   +-- analysis-worker.js        # Web Worker for calculations
 |-- devtools/
 |   |-- devtools.html             # DevTools page bootstrap
@@ -168,7 +194,7 @@ chrome-extension/
     +-- contrast.test.js          # Unit tests for contrast calculations
 ```
 
-All code ships as plain JavaScript and CSS with zero external dependencies.
+All code ships as plain JavaScript and CSS with zero external dependencies. The popup loads ES modules directly; the content script is bundled via `build.sh`.
 
 ---
 
@@ -205,34 +231,44 @@ Runs on `onInstalled` and `onStartup` events to ensure persistence.
 
 ### Content Script
 
-**File:** `content/content.js`
+**Source modules:** `content/` directory, bundled into `content/content.js` via `build.sh`
 
-The content script runs on every page and handles all DOM interaction:
+The content script runs on every page and handles all DOM interaction. Each concern lives in its own module:
 
-- **Color extraction** -- Walks the DOM tree, reads computed styles, and counts color frequency. Returns the top 20 colors.
-- **Element-pair detection** -- Finds real text-on-background pairs in the DOM with their CSS selectors, font sizes, and font weights.
-- **Effective background compositing** -- Walks ancestor chains to resolve the actual rendered background color, handling opacity inheritance and semi-transparent layers.
-- **Shadow DOM piercing** -- Uses `queryAllDeep()` to traverse open shadow roots.
-- **Visibility filtering** -- Skips elements with `display: none`, `visibility: hidden`, `aria-hidden`, `text-indent: -9999px`, clip rects, and zero dimensions.
-- **Element tracking** -- Maintains a `trackedElements` Map to correlate UI results with live DOM nodes for highlighting and fix previewing.
-- **SVG filter injection** -- Injects color blindness simulation filters into the page DOM and applies them via CSS.
-- **Theme detection** -- Scans stylesheets for `data-theme`, `.dark`/`.light` classes, and `prefers-color-scheme` media queries.
-- **Focus audit** -- Programmatically focuses each interactive element and measures focus indicator contrast.
-- **Fix preview** -- Injects temporary stylesheets to show how suggested fixes would look.
-- **MutationObserver** -- Watches for DOM changes and notifies the side panel for auto-rescan.
+| Module | Responsibility |
+|--------|---------------|
+| `extraction.js` | DOM walking, color extraction (top 20 by frequency), element-pair detection with selectors/fonts, element tracking via `data-chromacheck-id` attributes |
+| `dom-utils.js` | Visibility filtering (`display:none`, `aria-hidden`, clip rects, etc.), shadow DOM piercing (`queryAllDeep`), effective background compositing through ancestor chains |
+| `color-utils.js` | Color conversion helpers (RGB, RGBA, hex, compositing) |
+| `simulation.js` | CVD filter injection (SVG `feColorMatrix`), low vision CSS, element highlighting with scroll-into-view, fix preview stylesheet injection |
+| `focus-audit.js` | Programmatic focus audit -- focuses each interactive element, measures focus indicator contrast against background |
+| `theme-audit.js` | Scans stylesheets for `data-theme`, `.dark`/`.light` classes, `prefers-color-scheme` media queries; temporarily applies each variant and extracts pairs |
+| `picker.js` | Element inspector mode -- overlay, hover highlighting, click to resolve contrast details |
+| `mutation.js` | MutationObserver setup, filters out ChromaCheck's own mutations, debounced notification to side panel |
+| `message-handler.js` | `chrome.runtime.onMessage` listener, dispatches to the above modules |
 
 ### Side Panel (Popup)
 
-**Files:** `popup/popup.html`, `popup/popup.js`, `popup/popup.css`
+**Files:** `popup/popup.html`, `popup/popup.css`, and ES modules under `popup/`
 
 The primary user interface. Replaces the traditional popup with a persistent side panel that stays open while interacting with the page.
 
-**Responsibilities:**
-- Orchestrates all analysis workflows (scan, audit, compare)
-- Manages application state and renders results
-- Handles settings, history, pinning, and export
-- Communicates with the content script and analysis worker
-- Provides batch fix selection and CSS generation
+**Module responsibilities:**
+
+| Module | Role |
+|--------|------|
+| `state.js` | Single application state object |
+| `events.js` | Event handlers, delegation, filter toggles |
+| `actions.js` | Scan, picker, focus audit, theme audit workflows |
+| `render.js` | All UI rendering functions |
+| `analysis.js` | Worker management, `recomputeAnalysis()` |
+| `storage.js` | Persistence (history, pins, settings) |
+| `sync.js` | Tab/workspace synchronization, picker state |
+| `utils.js` | Issue grouping, escaping, formatting, explanations |
+| `messaging.js` | Chrome messaging helpers and error handling |
+| `dom-elements.js` | Cached DOM element references |
+| `clipboard.js` | Clipboard write helpers |
+| `constants.js` | Shared constants and labels |
 
 ### Analysis Worker
 
@@ -314,6 +350,19 @@ Goes beyond theoretical color pairs to find **actual** text-on-background pairs 
 - Resolved foreground and background hex values
 - Font size and weight (for large-text threshold calculations)
 - The issue type (text-contrast, link-contrast, placeholder, ui-component, etc.)
+- Design token names when CSS custom properties are detected on `:root`
+
+### Issue Grouping & Filtering
+
+Detected issues are organized into collapsible groups by shared contrast colors. Each group can contain multiple style variants (different tag/font combinations with the same color pair). Groups are sorted by severity.
+
+**Grouping keys:** issue type, foreground property, text/background colors, and (for single-variant groups) tag name and font metrics.
+
+**Filtering:** Both the contrast matrix and the page issues section have independent WCAG-level filter toggles (AAA, AA, AA Large, Fail). Filtering updates counts and hides non-matching groups.
+
+**Batch operations:** Select individual issues or entire groups for batch CSS patch generation. Selected issues are queued and a combined CSS fix can be copied to clipboard.
+
+**Expand/collapse:** Each group header can be toggled to show its member selectors. Clicking a selector's "Highlight" button scrolls to and outlines the element on the page.
 
 ### WCAG 2.1 / 2.2 Compliance
 
@@ -549,37 +598,39 @@ suggestPassingColor(hexToChange, fixedHex, targetRatio):
 
 ### Application State
 
-The side panel maintains a single state object in `popup.js`:
+The side panel maintains a single state object in `popup/state.js`:
 
 ```javascript
 {
-  palette: [],                // Extracted page colors
-  colors: [],                 // Top colors by frequency
-  combinations: [],           // All foreground/background pairs
-  elementPairs: [],           // Real DOM text+background pairs
-  focusPairs: [],             // Focus indicator audit results
-  issues: [],                 // Failing pairs (below threshold)
-  themeAudit: null,           // Theme variant analysis
-  domainComparison: null,     // Cross-page recurring issues
-  observedTabId: null,        // Tab being observed for mutations
-  activeFilters: { ... },     // WCAG level filter toggles
-  pageContext: { ... },       // URL, title, domain, supported
-  analysisMeta: { ... },      // extractedAt timestamp
+  palette: [],                  // Extracted page colors ({hex, count} entries)
+  colors: [],                   // Hex strings extracted from palette
+  combinations: [],             // All foreground/background pairs for matrix
+  elementPairs: [],             // Real DOM text+background pairs from scan
+  focusPairs: [],               // Focus indicator audit results
+  issues: [],                   // Failing pairs (below threshold)
+  themeAudit: null,             // Theme variant analysis
+  domainComparison: null,       // Cross-page recurring issues
+  observedTabId: null,          // Tab being observed for mutations
+  activeFilters: { ... },       // Contrast matrix WCAG level toggles
+  issueFilters: { ... },        // Page issues WCAG level toggles
+  pageContext: { ... },         // URL, title, domain, supported
+  analysisMeta: { ... },        // extractedAt timestamp
   settings: {
-    autoSync: false,          // Re-scan on DOM mutations
-    consoleWarnings: false,   // Log to DevTools console
-    cvdMode: "none",          // Color blindness simulation type
-    lowVisionMode: "none",    // Low vision simulation type
-    splitView: false,         // Side-by-side comparison
-    standard: "WCAG21",       // WCAG21 | WCAG22 | APCA
-    githubRepoUrl: ""         // For issue creation
+    autoSync: false,            // Re-scan on DOM mutations
+    consoleWarnings: false,     // Log to DevTools console
+    cvdMode: "none",            // Color blindness simulation type
+    lowVisionMode: "none",      // Low vision simulation type
+    splitView: false,           // Side-by-side comparison
+    standard: "WCAG21",         // WCAG21 | WCAG22 | APCA
+    githubRepoUrl: ""           // For issue creation
   },
-  pinnedItems: [],            // Watchlist
-  scanDiff: null,             // Delta from previous scan
-  selectedIssueKeys: [],      // Batch fix selection
-  isExtracting: false,        // Scan in progress
-  isFocusAuditing: false,     // Focus audit in progress
-  isThemeAuditing: false      // Theme audit in progress
+  pinnedItems: [],              // Watchlist
+  scanDiff: null,               // Delta from previous scan
+  selectedIssueKeys: [],        // Batch fix selection
+  expandedIssueGroupKeys: [],   // Currently expanded issue groups
+  isExtracting: false,          // Scan in progress
+  isFocusAuditing: false,       // Focus audit in progress
+  isThemeAuditing: false        // Theme audit in progress
 }
 ```
 
