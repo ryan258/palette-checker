@@ -218,16 +218,60 @@
               repeated issue signature.
             </p>
           </div>
-          <div class="filter-tools">
-            <span id="issues-count" class="count-indicator"></span>
-            <div class="batch-tools">
-              <span id="batch-count" class="count-indicator"></span>
-              <div class="batch-actions">
-                <button type="button" id="batch-copy-btn" class="btn-xs">
-                  Copy CSS Patch
+          <div class="filter-tools filter-tools-issues">
+            <div class="filter-summary-row">
+              <span id="issues-count" class="count-indicator"></span>
+              <div class="batch-tools batch-tools-inline">
+                <span id="batch-count" class="count-indicator"></span>
+                <div class="batch-actions">
+                  <button type="button" id="batch-copy-btn" class="btn-xs">
+                    Copy CSS Patch
+                  </button>
+                  <button type="button" id="batch-clear-btn" class="btn-xs">
+                    Clear
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="filter-legend-row">
+              <span class="filter-row-label">Filter by WCAG</span>
+              <div
+                class="legend"
+                id="issues-filter-legend"
+                role="group"
+                aria-label="Filter page issues by WCAG level"
+              >
+                <button
+                  type="button"
+                  class="badge badge-aaa"
+                  data-filter="AAA"
+                  aria-pressed="true"
+                >
+                  AAA
                 </button>
-                <button type="button" id="batch-clear-btn" class="btn-xs">
-                  Clear
+                <button
+                  type="button"
+                  class="badge badge-aa"
+                  data-filter="AA"
+                  aria-pressed="true"
+                >
+                  AA
+                </button>
+                <button
+                  type="button"
+                  class="badge badge-large"
+                  data-filter="AA Large"
+                  aria-pressed="true"
+                >
+                  AA Large
+                </button>
+                <button
+                  type="button"
+                  class="badge badge-fail"
+                  data-filter="Fail"
+                  aria-pressed="true"
+                >
+                  Fail
                 </button>
               </div>
             </div>

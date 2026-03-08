@@ -14,6 +14,10 @@ export const state = {
     acc[key] = true;
     return acc;
   }, {}),
+  issueFilters: FILTER_KEYS.reduce((acc, key) => {
+    acc[key] = true;
+    return acc;
+  }, {}),
   pageContext: {
     title: "Open a page to start.",
     url: "",

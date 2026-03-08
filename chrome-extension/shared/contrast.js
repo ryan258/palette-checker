@@ -401,8 +401,7 @@ function getAPCARecommendationDetails(lc) {
   const minimumText = getAPCAMinimumRequirements(lc);
 
   let tier = "Unsafe";
-  if (abs >= 90) tier = "Gold";
-  else if (abs >= 75) tier = "Gold";
+  if (abs >= 75) tier = "Gold";
   else if (abs >= 60) tier = "Silver";
   else if (abs >= 45) tier = "Bronze";
 

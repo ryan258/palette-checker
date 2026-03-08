@@ -28,6 +28,7 @@ export const filterLegend = document.getElementById("filter-legend");
 export const issuesSection = document.getElementById("issues-section");
 export const issuesList = document.getElementById("issues-list");
 export const issuesCount = document.getElementById("issues-count");
+export const issuesFilterLegend = document.getElementById("issues-filter-legend");
 export const batchCount = document.getElementById("batch-count");
 export const batchCopyBtn = document.getElementById("batch-copy-btn");
 export const batchClearBtn = document.getElementById("batch-clear-btn");

@@ -158,8 +158,8 @@ function calcAPCA(textHex, bgHex) {
 
 function getAPCAComplianceLevel(lc) {
   const absLc = Math.abs(lc);
-  if (absLc >= 75) return "AAA";
-  if (absLc >= 60) return "AA";
+  if (absLc >= 90) return "AAA";
+  if (absLc >= 75) return "AA";
   if (absLc >= 45) return "AA Large";
   return "Fail";
 }
@@ -447,7 +447,9 @@ function addColor() {
 
 function removeColor(id) {
   if (state.colors.length <= MIN_COLORS) return;
-  state.colors = state.colors.filter((color) => color.id !== id);
+  const index = state.colors.findIndex((color) => color.id === id);
+  if (index === -1) return;
+  state.colors.splice(index, 1);
   renderColorInputs();
 }
 

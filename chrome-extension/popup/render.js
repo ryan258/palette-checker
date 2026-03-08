@@ -475,6 +475,7 @@ export function renderPalette() {
 }
 export function renderCombinations() {
   combinationsGrid.innerHTML = "";
+  resultsCount.textContent = "";
 
   if (state.combinations.length === 0) {
     resultsSection.style.display = "none";
@@ -485,41 +486,45 @@ export function renderCombinations() {
 
   resultsSection.style.display = "";
   const fragment = document.createDocumentFragment();
+  let renderedCount = 0;
 
   state.combinations.forEach((entry) => {
+    const { textHex, bgHex, wcagRatio, wcagLevel, apcaScore, apcaLevel } =
+      entry;
+    if (typeof textHex !== "string" || typeof bgHex !== "string") return;
+
     const row = document.createElement("article");
     row.className = "combo-row";
-    row.dataset.wcagLevel = entry.wcagLevel;
-    row.dataset.apcaLevel = entry.apcaLevel;
-    const apcaDetails = getAPCARecommendationDetails(entry.apcaScore);
+    row.dataset.wcagLevel = wcagLevel;
+    row.dataset.apcaLevel = apcaLevel;
 
     const isPinned = state.pinnedItems.some(
-      (p) =>
-        p.type === "combo" && p.fg === entry.textHex && p.bg === entry.bgHex,
+      (p) => p.type === "combo" && p.fg === textHex && p.bg === bgHex,
     );
+    const polarityLabel = getAPCAPolarity(apcaScore).label;
 
     row.innerHTML = `
-      <div class="combo-preview-mini" style="background:${entry.bgHex};color:${entry.textHex};">Aa</div>
+      <div class="combo-preview-mini" style="background:${bgHex};color:${textHex};">Aa</div>
       <div class="combo-info">
-        <div class="combo-colors-label">${entry.textHex.toUpperCase()} on ${entry.bgHex.toUpperCase()}</div>
+        <div class="combo-colors-label">${textHex.toUpperCase()} on ${bgHex.toUpperCase()}</div>
         <div class="combo-scores">
           <div class="score-group ${state.settings.standard === "APCA" ? "inactive-standard" : "active-standard"}">
             <span class="score-label">WCAG</span>
-            <span class="score-value ${entry.wcagRatio >= 4.5 ? "pass" : "fail"}">${formatContrastRatio(entry.wcagRatio)}</span>
-            <span class="status-badge ${getStatusBadgeClass(entry.wcagLevel)}">${entry.wcagLevel}</span>
+            <span class="score-value ${wcagRatio >= 4.5 ? "pass" : "fail"}">${formatContrastRatio(wcagRatio)}</span>
+            <span class="status-badge ${getStatusBadgeClass(wcagLevel)}">${wcagLevel}</span>
           </div>
           <div class="score-group ${state.settings.standard === "APCA" ? "active-standard" : "inactive-standard"}">
             <span class="score-label">APCA</span>
-            <span class="score-value ${Math.abs(entry.apcaScore) >= 60 ? "pass" : "fail"}">${formatAPCAScore(entry.apcaScore)}</span>
-            <span class="status-badge ${getStatusBadgeClass(entry.apcaLevel)}">${entry.apcaLevel}</span>
+            <span class="score-value ${Math.abs(apcaScore) >= 60 ? "pass" : "fail"}">${formatAPCAScore(apcaScore)}</span>
+            <span class="status-badge ${getStatusBadgeClass(apcaLevel)}">${apcaLevel}</span>
           </div>
         </div>
         <div class="issue-meta">
-          <span class="issue-polarity">${escapeHtml(apcaDetails.polarity.label)}</span>
+          <span class="issue-polarity">${escapeHtml(polarityLabel)}</span>
         </div>
       </div>
       <button type="button" class="btn-icon btn-pin ${isPinned ? "active" : ""}"
-        data-fg="${entry.textHex}" data-bg="${entry.bgHex}" data-ratio="${entry.wcagRatio}" data-level="${entry.wcagLevel}" data-wcag-level="${entry.wcagLevel}" data-apca-level="${entry.apcaLevel}" data-apca-score="${entry.apcaScore}" title="${isPinned ? "Unpin result" : "Pin result"}">
+        data-fg="${textHex}" data-bg="${bgHex}" data-ratio="${wcagRatio}" data-level="${wcagLevel}" data-wcag-level="${wcagLevel}" data-apca-level="${apcaLevel}" data-apca-score="${apcaScore}" title="${isPinned ? "Unpin result" : "Pin result"}">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
         </svg>
@@ -527,9 +532,20 @@ export function renderCombinations() {
     `;
 
     fragment.appendChild(row);
+    renderedCount += 1;
   });
 
   combinationsGrid.appendChild(fragment);
+
+  if (!renderedCount) {
+    const empty = document.createElement("div");
+    empty.className = "no-results";
+    empty.textContent = "No contrast pairs are available for the current palette.";
+    combinationsGrid.appendChild(empty);
+    updateEmptyStateVisibility();
+    return;
+  }
+
   filterCombinations();
   updateEmptyStateVisibility();
 }
@@ -838,13 +854,19 @@ export function renderIssues() {
 
   syncSelectedIssueKeys();
   const issueGroups = buildIssueGroups(state.issues);
+  const visibleIssueGroups = issueGroups.filter(
+    (group) => state.issueFilters[group.representative?.wcagLevel] !== false,
+  );
   syncExpandedIssueGroupKeys(issueGroups);
   issuesSection.style.display = "";
   const summary = getIssueSummary();
   const problemCount = summary.fails + summary.warnings;
-  issuesCount.textContent = problemCount
-    ? `${issueGroups.length} groups · ${problemCount} failing of ${summary.total} elements`
-    : `${issueGroups.length} groups · ${summary.total} elements — all passing`;
+  issuesCount.textContent =
+    visibleIssueGroups.length !== issueGroups.length
+      ? `${visibleIssueGroups.length} visible of ${issueGroups.length} groups`
+      : problemCount
+        ? `${issueGroups.length} groups · ${problemCount} failing of ${summary.total} elements`
+        : `${issueGroups.length} groups · ${summary.total} elements — all passing`;
   batchCount.textContent = state.selectedIssueKeys.length
     ? `${state.selectedIssueKeys.length} queued`
     : "";
@@ -853,7 +875,17 @@ export function renderIssues() {
 
   const fragment = document.createDocumentFragment();
 
-  issueGroups.forEach((group) => {
+  if (!visibleIssueGroups.length) {
+    const empty = document.createElement("div");
+    empty.className = "no-results";
+    empty.textContent = "No page issues match the active WCAG filters.";
+    fragment.appendChild(empty);
+    issuesList.appendChild(fragment);
+    updateEmptyStateVisibility();
+    return;
+  }
+
+  visibleIssueGroups.forEach((group) => {
     fragment.appendChild(buildIssueGroupElement(group));
   });
 

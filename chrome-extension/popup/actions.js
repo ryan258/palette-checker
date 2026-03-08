@@ -81,7 +81,7 @@ export async function handleExtract() {
       setAnalysis(nextPalette, extractedAt);
     }
     await recomputeAnalysis({
-      colors: nextPalette,
+      colors: state.colors,
       pairs: getCurrentAnalysisPairs(),
     });
     const nextIssueSummary = summarizeIssuesForStorage(state.issues);

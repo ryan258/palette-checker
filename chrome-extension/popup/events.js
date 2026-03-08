@@ -1,6 +1,6 @@
 import { PICKER_STATE_KEY } from './constants.js';
 import { state } from './state.js';
-import { extractBtn, focusAuditBtn, themeAuditBtn, pickerBtn, statusBanner, paletteSwatches, clearPickedBtn, combinationsGrid, filterLegend, issuesList, batchCopyBtn, batchClearBtn, settingsBtn, closeSettingsBtn, settingsPopover, autoSyncToggle, consoleWarningsToggle, standardSelect, cvdSelect, lowVisionSelect, splitViewToggle, githubRepoUrlInput, exportBtn, historyList, pinnedList } from './dom-elements.js';
+import { extractBtn, focusAuditBtn, themeAuditBtn, pickerBtn, statusBanner, paletteSwatches, clearPickedBtn, combinationsGrid, filterLegend, issuesFilterLegend, issuesList, batchCopyBtn, batchClearBtn, settingsBtn, closeSettingsBtn, settingsPopover, autoSyncToggle, consoleWarningsToggle, standardSelect, cvdSelect, lowVisionSelect, splitViewToggle, githubRepoUrlInput, exportBtn, historyList, pinnedList } from './dom-elements.js';
 import { sendToContent } from './messaging.js';
 import { loadSettings, saveSettings, clearPickerState, readAnalysisMap, loadPinnedItems } from './storage.js';
 import { getIssueStableKey, normalizeSavedScan, getIssueFixOptions, buildIssueGroups } from './utils.js';
@@ -327,7 +327,15 @@ issuesList.addEventListener("click", (event) => {
   const exampleBtn = event.target.closest(".issue-example");
   const id = exampleBtn?.dataset.issueId;
   if (id !== undefined) {
-    void sendToContent({ action: "highlightElement", id });
+    const actionSpan = exampleBtn.querySelector(".issue-example-action");
+    const originalText = actionSpan?.textContent;
+    if (actionSpan) actionSpan.textContent = "Scrolling…";
+    sendToContent({ action: "highlightElement", id }).then((response) => {
+      if (!actionSpan) return;
+      const ok = response?.ok;
+      actionSpan.textContent = ok ? "Highlighted" : "Not found";
+      setTimeout(() => { actionSpan.textContent = originalText; }, ok ? 1500 : 3000);
+    });
   }
 });
 
@@ -351,16 +359,44 @@ batchClearBtn.addEventListener("click", () => {
   renderIssues();
 });
 
-filterLegend.addEventListener("click", (event) => {
+function syncLegendButtons(legend, filters) {
+  if (!legend) return;
+
+  legend.querySelectorAll("button[data-filter]").forEach((button) => {
+    const key = button.getAttribute("data-filter");
+    const isActive = filters[key] !== false;
+    button.classList.toggle("inactive", !isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function syncFilterButtons() {
+  syncLegendButtons(filterLegend, state.activeFilters);
+  syncLegendButtons(issuesFilterLegend, state.issueFilters);
+}
+
+function handleMatrixFilterToggle(event) {
   const button = event.target.closest("button[data-filter]");
   if (!button) return;
 
   const key = button.getAttribute("data-filter");
   state.activeFilters[key] = !state.activeFilters[key];
-  button.classList.toggle("inactive", !state.activeFilters[key]);
-  button.setAttribute("aria-pressed", String(state.activeFilters[key]));
+  syncLegendButtons(filterLegend, state.activeFilters);
   filterCombinations();
-});
+}
+
+function handleIssueFilterToggle(event) {
+  const button = event.target.closest("button[data-filter]");
+  if (!button) return;
+
+  const key = button.getAttribute("data-filter");
+  state.issueFilters[key] = !state.issueFilters[key];
+  syncLegendButtons(issuesFilterLegend, state.issueFilters);
+  renderIssues();
+}
+
+filterLegend?.addEventListener("click", handleMatrixFilterToggle);
+issuesFilterLegend?.addEventListener("click", handleIssueFilterToggle);
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
@@ -399,6 +435,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadSettings();
   await loadPinnedItems();
 
+  syncFilterButtons();
   setExtractLoading(false);
   setPickerActive(false);
 

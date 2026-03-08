@@ -485,6 +485,47 @@ body::-webkit-scrollbar-thumb {
   gap: 10px;
 }
 
+.filter-tools-issues {
+  min-width: min(100%, 360px);
+  gap: 8px;
+}
+
+.filter-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.batch-tools-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.filter-row-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.filter-legend-row .legend {
+  width: auto;
+}
+
 .legend {
   display: flex;
   flex-wrap: wrap;
@@ -1152,6 +1193,12 @@ body::-webkit-scrollbar-thumb {
 
   .filter-tools {
     align-items: flex-start;
+  }
+
+  .filter-summary-row,
+  .filter-legend-row,
+  .batch-tools-inline {
+    justify-content: flex-start;
   }
 
   .legend {
