@@ -102,7 +102,6 @@ export function runAnalysisSync({ colors, pairs, settings }) {
     issues: buildIssuesData(pairs, settings),
   };
 }
-export let syncToken = 0;
 export let analysisWorker = null;
 export let analysisRequestId = 0;
 export const pendingAnalysisRequests = new Map();

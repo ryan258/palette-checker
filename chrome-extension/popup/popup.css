@@ -936,6 +936,12 @@ body::-webkit-scrollbar-thumb {
   white-space: nowrap;
 }
 
+.issue-group-count-subtle {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-secondary);
+}
+
 .issue-group-preview {
   color: var(--text-secondary);
   font-size: 12px;
@@ -954,6 +960,35 @@ body::-webkit-scrollbar-thumb {
   max-height: 280px;
   overflow: auto;
   padding-right: 4px;
+}
+
+.issue-variant-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.issue-variant-group + .issue-variant-group {
+  border-top: 1px dashed rgba(148, 163, 184, 0.16);
+}
+
+.issue-variant-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.issue-variant-preview {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.issue-variant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .issue-example {

@@ -6,8 +6,8 @@
 // 1. Create the main ChromaCheck panel (reuses the popup UI)
 chrome.devtools.panels.create(
   "ChromaCheck",
-  "../icons/icon-16.png",
-  "../popup/popup.html",
+  "icons/icon-16.png",
+  "popup/popup.html",
   (panel) => {
     // Panel created
   },
@@ -15,7 +15,7 @@ chrome.devtools.panels.create(
 
 // 2. Create the Elements sidebar pane for contextual contrast
 chrome.devtools.panels.elements.createSidebarPane("Contrast", (sidebar) => {
-  sidebar.setPage("sidebar.html");
+  sidebar.setPage("devtools/sidebar.html");
 
   // Listen for selection changes in the Elements panel
   chrome.devtools.panels.elements.onSelectionChanged.addListener(() => {

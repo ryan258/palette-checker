@@ -3,10 +3,11 @@ import { state } from './state.js';
 import { statusBanner } from './dom-elements.js';
 import { getActiveTab, sendToTab, sendToContent } from './messaging.js';
 import { readPickerState, loadSavedAnalysis, saveSettings } from './storage.js';
-import { deriveDomain } from './utils.js';
-import { syncToken } from './analysis.js';
+import { deriveDomain, isInspectablePageUrl } from './utils.js';
 import { setAnalysis, render, clearAnalysis, refreshHistory, renderStatusBanner, clearStatusBanner, setPickerActive, renderPageContext, renderMetrics, clearPickedView, renderPickedResult, renderPalette, renderCombinations, renderIssues } from './render.js';
 import { applyVisionSettings, handleExtract } from './actions.js';
+
+let syncToken = 0;
 export function setupRuntimeListeners() {
   chrome.runtime.onMessage.addListener((message, sender) => {
     if (message.action === "onPageMutation") {
@@ -76,12 +77,14 @@ export async function getPageContext() {
   const fallbackTitle = typeof tab.title === "string" ? tab.title : "";
   const response = await sendToContent({ action: "getPageContext" });
   const url = response?.url || fallbackUrl;
+  const supported =
+    Boolean(response?.url) || isInspectablePageUrl(fallbackUrl);
 
   return {
     title: response?.title || fallbackTitle || "Current page",
     url,
     domain: deriveDomain(url),
-    supported: Boolean(response?.url),
+    supported,
   };
 }
 export async function syncPickerStateFromStorage() {

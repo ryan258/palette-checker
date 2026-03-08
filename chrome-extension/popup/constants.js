@@ -10,7 +10,13 @@ export const PICKER_PENDING_MESSAGE =
 export const UNSUPPORTED_PAGE_MESSAGE =
   "This tab blocks page inspection. Switch to a regular webpage to scan colors or inspect live contrast.";
 export const EXTRACT_ERROR_MESSAGE =
-  "Couldn't scan the current page. Chrome internal pages and the Web Store do not allow content scripts.";
+  "Couldn't scan the current page. Reload the tab and try again.";
+export const PICKER_ERROR_MESSAGE =
+  "Couldn't start inspect mode on this page. Reload the tab and try again.";
+export const FOCUS_AUDIT_ERROR_MESSAGE =
+  "Focus audit couldn't finish on this page. Try scanning again.";
+export const THEME_AUDIT_ERROR_MESSAGE =
+  "Theme audit couldn't finish on this page. Try scanning again.";
 export const EXTRACT_LABEL =
   '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9m-9 9a9 9 0 0 1 9-9"/></svg> Scan Page Palette';
 export const EXTRACT_LOADING_LABEL = '<span class="spinner"></span> Scanning...';

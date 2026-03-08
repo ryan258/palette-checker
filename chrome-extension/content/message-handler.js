@@ -5,6 +5,20 @@ import { auditFocusIndicators } from './focus-audit.js';
 import { auditThemes } from './theme-audit.js';
 import { startMutationObserver, stopMutationObserver } from './mutation.js';
 
+const CHROMACHECK_ERROR_KEY = "__chromacheckError";
+
+function buildActionError(code, error) {
+  return {
+    [CHROMACHECK_ERROR_KEY]: {
+      code,
+      message:
+        error && typeof error.message === "string" && error.message.trim()
+          ? error.message.trim()
+          : String(error || "Unknown error"),
+    },
+  };
+}
+
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === "getPageContext") {
@@ -15,7 +29,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
   if (message.action === "extractColors") {
-    sendResponse({ colors: extractColors() });
+    try {
+      sendResponse({ colors: extractColors() });
+    } catch (error) {
+      sendResponse({
+        colors: [],
+        ...buildActionError("extract-colors-failed", error),
+      });
+    }
     return false;
   }
   if (message.action === "startPicker") {
@@ -63,19 +84,37 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return false;
   }
   if (message.action === "extractElementPairs") {
-    sendResponse({ pairs: extractElementPairs() });
+    try {
+      sendResponse({ pairs: extractElementPairs() });
+    } catch (error) {
+      sendResponse({
+        pairs: [],
+        ...buildActionError("extract-pairs-failed", error),
+      });
+    }
     return false;
   }
   if (message.action === "auditFocusIndicators") {
     auditFocusIndicators()
       .then((pairs) => sendResponse({ pairs }))
-      .catch(() => sendResponse({ pairs: [] }));
+      .catch((error) =>
+        sendResponse({
+          pairs: [],
+          ...buildActionError("focus-audit-failed", error),
+        }),
+      );
     return true;
   }
   if (message.action === "auditThemes") {
     auditThemes()
       .then((result) => sendResponse(result))
-      .catch(() => sendResponse({ variants: [], notes: [] }));
+      .catch((error) =>
+        sendResponse({
+          variants: [],
+          notes: [],
+          ...buildActionError("theme-audit-failed", error),
+        }),
+      );
     return true;
   }
   if (message.action === "previewFix") {

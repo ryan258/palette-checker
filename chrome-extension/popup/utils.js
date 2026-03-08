@@ -7,6 +7,16 @@ export function deriveDomain(url) {
     return "Current page";
   }
 }
+export function isInspectablePageUrl(url) {
+  if (!url) return false;
+
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === "http:" || protocol === "https:" || protocol === "file:";
+  } catch {
+    return false;
+  }
+}
 export function formatPageUrl(url) {
   if (!url) return "Switch to a regular webpage to begin.";
 
@@ -63,6 +73,16 @@ export function getIssueGroupKey(issue) {
     issue?.type === "text" || issue?.type === "placeholder"
       ? issue?.fontWeight || ""
       : "",
+  ].join("|");
+}
+export function getIssueParentGroupKey(issue) {
+  return [
+    issue?.type || "text",
+    issue?.foregroundProperty || "color",
+    issue?.textColor || "",
+    issue?.bgColor || "",
+    issue?.wcagLevel || "",
+    issue?.apcaLevel || "",
   ].join("|");
 }
 export function getIssueGroupTitle(issue) {
@@ -294,21 +314,25 @@ export function buildIssueGroups(issues) {
   const groupsByKey = new Map();
 
   (Array.isArray(issues) ? issues : []).forEach((issue) => {
-    const key = getIssueGroupKey(issue);
-    if (!groupsByKey.has(key)) {
-      groupsByKey.set(key, {
-        key,
+    const parentKey = getIssueParentGroupKey(issue);
+    if (!groupsByKey.has(parentKey)) {
+      groupsByKey.set(parentKey, {
+        key: parentKey,
         representative: issue,
         issues: [],
         issueKeys: [],
         previewSamples: [],
         previewSet: new Set(),
+        textColorTokens: new Set(),
+        bgColorTokens: new Set(),
+        variantsByKey: new Map(),
       });
     }
 
-    const group = groupsByKey.get(key);
+    const group = groupsByKey.get(parentKey);
     const issueKey = getIssueStableKey(issue);
     const preview = typeof issue.textPreview === "string" ? issue.textPreview : "";
+    const variantKey = getIssueGroupKey(issue);
 
     group.issues.push(issue);
     group.issueKeys.push(issueKey);
@@ -319,11 +343,50 @@ export function buildIssueGroups(issues) {
     if (preview) {
       group.previewSet.add(preview);
     }
+
+    if (issue.textColorToken) {
+      group.textColorTokens.add(issue.textColorToken);
+    }
+    if (issue.bgColorToken) {
+      group.bgColorTokens.add(issue.bgColorToken);
+    }
+
+    if (!group.variantsByKey.has(variantKey)) {
+      group.variantsByKey.set(variantKey, {
+        key: variantKey,
+        representative: issue,
+        issues: [],
+        issueKeys: [],
+        previewSamples: [],
+        previewSet: new Set(),
+      });
+    }
+
+    const variant = group.variantsByKey.get(variantKey);
+    variant.issues.push(issue);
+    variant.issueKeys.push(issueKey);
+
+    if (
+      preview &&
+      !variant.previewSet.has(preview) &&
+      variant.previewSamples.length < 3
+    ) {
+      variant.previewSamples.push(preview);
+    }
+    if (preview) {
+      variant.previewSet.add(preview);
+    }
   });
 
   const selectedKeys = new Set(state.selectedIssueKeys);
 
   return [...groupsByKey.values()].map((group) => {
+    const variantGroups = [...group.variantsByKey.values()]
+      .map((variant) => ({
+        ...variant,
+        count: variant.issues.length,
+      }))
+      .sort((a, b) => b.count - a.count);
     const fixOptions = getIssueGroupFixOptions(group);
     const selectableKeys = fixOptions?.recommended ? [...group.issueKeys] : [];
     const selectedCount = selectableKeys.filter((key) => selectedKeys.has(key))
@@ -332,6 +395,10 @@ export function buildIssueGroups(issues) {
     return {
       ...group,
       count: group.issues.length,
+      variantGroups,
+      variantCount: variantGroups.length,
+      textColorTokens: [...group.textColorTokens],
+      bgColorTokens: [...group.bgColorTokens],
       fixOptions,
       selectableKeys,
       selectedCount,

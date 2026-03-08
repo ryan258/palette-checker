@@ -536,6 +536,18 @@ export function renderCombinations() {
 export function buildIssueGroupElement(group) {
   const issue = group.representative;
   const apcaDetails = getAPCARecommendationDetails(issue.apcaScore);
+  const textTokens =
+    Array.isArray(group.textColorTokens) && group.textColorTokens.length
+      ? group.textColorTokens
+      : issue.textColorToken
+        ? [issue.textColorToken]
+        : [];
+  const bgTokens =
+    Array.isArray(group.bgColorTokens) && group.bgColorTokens.length
+      ? group.bgColorTokens.filter((token) => !textTokens.includes(token))
+      : issue.bgColorToken && !textTokens.includes(issue.bgColorToken)
+        ? [issue.bgColorToken]
+        : [];
   const isPinned = state.pinnedItems.some(
     (entry) =>
       entry.type === "issue" && entry.key === getIssueStableKey(issue),
@@ -553,6 +565,8 @@ export function buildIssueGroupElement(group) {
   const groupTitle = getIssueGroupTitle(issue);
   const groupMatchLabel =
     group.count === 1 ? "1 matching selector" : `${group.count} matching selectors`;
+  const variantLabel =
+    group.variantCount > 1 ? `${group.variantCount} style variants` : "";
   const previewLabel = group.previewSamples.length
     ? `Examples: ${group.previewSamples
         .map((preview) => `"${preview}"`)
@@ -560,7 +574,9 @@ export function buildIssueGroupElement(group) {
     : groupMatchLabel;
   const toggleLabel = group.isExpanded
     ? "Hide selectors"
-    : `Show ${group.count === 1 ? "selector" : `${group.count} selectors`}`;
+    : group.variantCount > 1
+      ? `Show ${group.variantCount} variants`
+      : `Show ${group.count === 1 ? "selector" : `${group.count} selectors`}`;
   const queueLabel = !group.selectableKeys.length
     ? "Batch"
     : isSelected
@@ -584,13 +600,28 @@ export function buildIssueGroupElement(group) {
         <div class="issue-group-topline">
           <strong class="issue-group-title">${escapeHtml(groupTitle)}</strong>
           <span class="issue-group-count">${groupMatchLabel}</span>
+          ${variantLabel ? `<span class="issue-group-count issue-group-count-subtle">${escapeHtml(variantLabel)}</span>` : ""}
         </div>
         <div class="issue-meta">
-          <span class="issue-tag">${escapeHtml(issue.tagName)}</span>
-          ${issue.type === "text" || issue.type === "placeholder" ? `<span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>` : ""}
+          ${
+            group.variantCount === 1
+              ? `<span class="issue-tag">${escapeHtml(issue.tagName)}</span>
+          ${issue.type === "text" || issue.type === "placeholder" ? `<span class="issue-font">${issue.fontSize} / ${issue.fontWeight}</span>` : ""}`
+              : `<span class="issue-font">Grouped by shared contrast colors</span>`
+          }
           <span class="issue-polarity">${escapeHtml(apcaDetails.polarity.label)}</span>
-          ${issue.textColorToken ? `<span class="issue-token" title="Foreground: ${issue.textColor}">${escapeHtml(issue.textColorToken)}</span>` : ""}
-          ${issue.bgColorToken ? `<span class="issue-token" title="Background: ${issue.bgColor}">${escapeHtml(issue.bgColorToken)}</span>` : ""}
+          ${textTokens
+            .map(
+              (token) =>
+                `<span class="issue-token" title="Foreground: ${issue.textColor}">${escapeHtml(token)}</span>`,
+            )
+            .join("")}
+          ${bgTokens
+            .map(
+              (token) =>
+                `<span class="issue-token" title="Background: ${issue.bgColor}">${escapeHtml(token)}</span>`,
+            )
+            .join("")}
         </div>
         <div class="issue-group-preview">${escapeHtml(previewLabel)}</div>
         <div class="combo-scores">
@@ -721,24 +752,68 @@ export function buildIssueGroupElement(group) {
     pinButton.dataset.apcaScore = String(issue.apcaScore);
   }
 
+  const bodyHtml =
+    group.variantGroups.length > 1
+      ? group.variantGroups
+          .map((variant) => {
+            const variantIssue = variant.representative;
+            const variantMatchLabel =
+              variant.count === 1 ? "1 selector" : `${variant.count} selectors`;
+            const variantPreviewLabel = variant.previewSamples.length
+              ? `Examples: ${variant.previewSamples
+                  .map((preview) => `"${preview}"`)
+                  .join(", ")}${variant.previewSet.size > variant.previewSamples.length ? ` +${variant.previewSet.size - variant.previewSamples.length} more` : ""}`
+              : variantMatchLabel;
+
+            return `
+              <section class="issue-variant-group">
+                <div class="issue-variant-head">
+                  <div class="issue-meta">
+                    <span class="issue-tag">${escapeHtml(variantIssue.tagName)}</span>
+                    ${variantIssue.type === "text" || variantIssue.type === "placeholder" ? `<span class="issue-font">${variantIssue.fontSize} / ${variantIssue.fontWeight}</span>` : ""}
+                    <span class="issue-group-count issue-group-count-subtle">${variantMatchLabel}</span>
+                  </div>
+                  <div class="issue-variant-preview">${escapeHtml(variantPreviewLabel)}</div>
+                </div>
+                <div class="issue-variant-list">
+                  ${variant.issues
+                    .map(
+                      (member) => `
+                        <button type="button" class="issue-example" data-issue-id="${member.id}">
+                          <div class="issue-example-main">
+                            <code class="issue-selector">${escapeHtml(member.selector)}</code>
+                            <span class="issue-example-preview">${escapeHtml(member.textPreview || member.tagName)}</span>
+                          </div>
+                          <span class="issue-example-action">Highlight</span>
+                        </button>
+                      `,
+                    )
+                    .join("")}
+                </div>
+              </section>
+            `;
+          })
+          .join("")
+      : group.issues
+          .map(
+            (member) => `
+              <button type="button" class="issue-example" data-issue-id="${member.id}">
+                <div class="issue-example-main">
+                  <code class="issue-selector">${escapeHtml(member.selector)}</code>
+                  <span class="issue-example-preview">${escapeHtml(member.textPreview || member.tagName)}</span>
+                </div>
+                <span class="issue-example-action">Highlight</span>
+              </button>
+            `,
+          )
+          .join("");
+
   const body = document.createElement("div");
   body.className = "issue-group-body";
   body.hidden = !group.isExpanded;
   body.innerHTML = `
     <div class="issue-group-list">
-      ${group.issues
-        .map(
-          (member) => `
-            <button type="button" class="issue-example" data-issue-id="${member.id}">
-              <div class="issue-example-main">
-                <code class="issue-selector">${escapeHtml(member.selector)}</code>
-                <span class="issue-example-preview">${escapeHtml(member.textPreview || member.tagName)}</span>
-              </div>
-              <span class="issue-example-action">Highlight</span>
-            </button>
-          `,
-        )
-        .join("")}
+      ${bodyHtml}
     </div>
   `;
   row.appendChild(body);
