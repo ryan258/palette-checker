@@ -2,197 +2,177 @@
 
 The vision: **the fastest path from "is this accessible?" to "yes, and here's the proof."**
 
-Existing tools make you choose between power and usability. axe DevTools buries contrast issues in a 200-item audit. WAVE litters the page with icons that break layouts. Stark locks real features behind a paywall. Lighthouse gives you a score but no workflow to fix it. None of them speak APCA natively.
+ChromaCheck is a contrast-first tool that understands both the current standard (WCAG 2.1/2.2) and the future one (WCAG 3.0 APCA), with a workflow designed for how designers and developers actually work.
 
-ChromaCheck fills the gap: a contrast-first tool that understands both the current standard (WCAG 2.1/2.2) and the future one (WCAG 3.0 APCA), with a workflow designed for how designers and developers actually work.
-
----
-
-## Phase 0: Foundation (Current)
-
-The MVP is live. It works.
-
-- [x] Extract page colors from computed styles (top 20 by frequency)
-- [x] Contrast matrix with WCAG 2.1 ratios and APCA Lc scores for all pairs
-- [x] Filter combinations by compliance level (AAA / AA / AA Large / Fail)
-- [x] Element picker with effective background resolution (walks DOM tree)
-- [x] Shared calculation library matching the main ChromaCheck app exactly
-- [x] Manifest V3, zero external dependencies
+For completed work, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## Phase 1: Contextual Page Analysis
+## Current State
 
-**Goal: Understand what's actually on the page, not just what colors exist.**
+The extension has a working scan-to-fix pipeline: extract page colors, detect real element pairs, calculate WCAG and APCA scores, suggest fixes, preview them live, and copy CSS. It also has CVD simulation, focus indicator auditing, theme auditing, scan history, pinning, and DevTools integration.
 
-The biggest problem with color extraction is that a flat palette loses context. Knowing `#333` and `#fff` both appear on a page tells you nothing. Knowing that a `<p>` with `color: #333` sits inside a `<div>` with `background: #fff` tells you everything.
+The core engine (`shared/contrast.js`) is solid. The DOM analysis in `content/content.js` handles real-world complexity well -- shadow DOM, opacity inheritance, semi-transparent compositing.
 
-- [x] **Element-Pair Detection** - Instead of extracting a flat list of colors, detect actual text-on-background pairs as they exist in the DOM. Walk each text node, resolve its computed `color`, walk ancestors to resolve its effective `background-color` (compositing semi-transparent layers), and report the real contrast relationship.
-- [x] **Issue-Centric Results View** - Default view shows failing element pairs, sorted by severity. Each result links to the DOM element. Click to scroll-and-highlight on the page.
-- [x] **CSS Selector in Results** - Show a minimal CSS selector for each flagged element so developers can find it in their code immediately (e.g., `.hero-section > h2`, `nav a:nth-child(3)`).
-- [x] **Effective Background Compositing** - Properly composite semi-transparent backgrounds, layered backgrounds, and CSS gradients to compute the actual rendered background color behind text. Handle `opacity` inheritance.
-- [x] **Ignore Invisible Content** - Skip elements hidden by `clip`, `overflow: hidden`, `text-indent: -9999px`, zero-height containers, and `aria-hidden="true"`.
+The problem is structural. The two main files (`popup.js` at 2,400 lines and `content.js` at 1,900 lines) are monoliths. Test coverage only reaches the pure math layer. Features have spread wide but thin. The roadmap below focuses on depth, reliability, and maintainability before any new features.
 
 ---
 
-## Phase 2: Side Panel & Persistent Workflow
+## Priority 1: Modularize the Codebase
 
-**Goal: Stop losing your analysis every time the popup closes.**
+**Goal: Make every future change cheaper.**
 
-Chrome's popup closes on any outside click. This is hostile to a workflow where you're switching between the extension and the page. Chrome Side Panel API fixes this.
+Both `popup.js` and `content.js` do too many unrelated things in single files. Every bug fix and feature touches code it shouldn't need to touch.
 
-- [x] **Side Panel Mode** - Primary UI now runs inside `chrome.sidePanel`, so the workspace stays open while you interact with the page.
-- [x] **Live Re-Analysis** - An opt-in `Auto-sync Results` setting now re-runs extraction after DOM mutations, throttled via `MutationObserver`, while the side panel stays open.
-- [x] **Scan History** - Store the last 10 scans per page in `chrome.storage.local` and restore older snapshots from the panel's history list.
-- [x] **Pin Results** - Users can pin contrast matrix rows and page issues to a persistent watchlist that survives rescans.
-- [x] **Scan Diffs** - Compare the latest scan against the previous snapshot and summarize the delta: "3 new issues since last scan."
-- [x] **Pinned Status Change Alerts** - Highlight pinned items when a fresh scan changes their contrast status.
+### content.js -> modules
 
----
+Split into focused, single-responsibility modules:
 
-## Phase 3: Fix It, Don't Just Flag It
+- [ ] `content/extraction.js` -- `extractColors()`, `extractElementPairs()`, color counting, token map building
+- [ ] `content/picker.js` -- Overlay creation, hover/click handling, picker state management
+- [ ] `content/simulation.js` -- CVD filter injection, low vision CSS, split-view iframe, toolbar, keyboard shortcuts
+- [ ] `content/focus-audit.js` -- `auditFocusIndicators()`, focus style diffing
+- [ ] `content/theme-audit.js` -- `detectThemeCandidates()`, `applyThemeCandidate()`, `auditThemes()`
+- [ ] `content/dom-utils.js` -- `isVisible()`, `isContentVisible()`, `queryAllDeep()`, `getMinimalSelector()`, `buildRenderChain()`, `getRenderedPair()`
+- [ ] `content/message-handler.js` -- `chrome.runtime.onMessage` listener, dispatch to modules
+- [ ] `content/mutation.js` -- MutationObserver setup, external mutation filtering, debounced notification
 
-**Goal: Every failure should come with a solution, not just a red badge.**
+### popup.js -> modules
 
-This is where most tools stop. axe tells you something fails. Lighthouse gives you a score. Nobody hands you the fix. ChromaCheck should.
+Split the UI layer:
 
-- [x] **Auto-Suggest Nearest Passing Color** - For every failing pair, compute the minimum adjustment to the text or background color that achieves AA (or AAA). Suggest the nearest color in the same hue family, preserving design intent. Show both "adjust text" and "adjust background" options.
-- [x] **APCA-Aware Font Size Recommendations** - APCA's power is that it maps contrast to minimum font sizes. For every pair, show: "This contrast (Lc 48) requires minimum 24px / 700 weight for body text." Use the APCA lookup table for Bronze, Silver, and Gold conformance.
-- [x] **Live Preview Fixes on Page** - Inject a temporary stylesheet to preview the suggested fix directly on the page. Toggle between original and fixed. No page reload.
-- [x] **One-Click Copy Fix** - Copy the fix as a CSS rule: `/* ChromaCheck fix: contrast 3.2:1 -> 4.5:1 */ .hero-title { color: #1a3a5c; }`. Ready to paste into a stylesheet.
-- [x] **Batch Fix Mode** - Select multiple failing pairs and generate a single CSS patch file that fixes all of them.
-- [x] **Plain-Language Explanations** - Every failure should explain _why_ it matters and _who_ it affects, not just cite "WCAG 1.4.3." Example: "This text will be unreadable for the ~217 million people with moderate visual impairments. Increasing contrast to 4.5:1 fixes it." Teach while you flag.
+- [ ] `popup/state.js` -- State object, storage read/write, settings management
+- [ ] `popup/storage.js` -- Analysis history, pinned items, scan diffing, domain comparison
+- [ ] `popup/render-issues.js` -- Issue groups, fix options, batch selection, group expand/collapse
+- [ ] `popup/render-palette.js` -- Color swatches, combination matrix, filter toggles
+- [ ] `popup/render-chrome.js` -- Page context, metrics, empty state, status banner, settings popover
+- [ ] `popup/analysis.js` -- Worker management, `recomputeAnalysis()`, `runAnalysisWorker()`
+- [ ] `popup/event-handlers.js` -- Button listeners, delegation, picker sync, tab change handling
 
----
+### Build step
 
-## Phase 4: Full-Page Color Blindness Simulation
+Modularization requires a minimal build step to bundle modules back into single files for the extension:
 
-**Goal: See the entire page through someone else's eyes, not just swatches in a popup.**
-
-The main ChromaCheck app simulates color blindness on contrast cards. The extension should simulate it on the actual live page.
-
-- [x] **Full-Page SVG Filter Overlay** - Apply color blindness simulation filters to the entire page via an injected `<svg>` + CSS `filter` on `<html>`. Support all 8 simulation types (protanopia, deuteranopia, tritanopia, protanomaly, deuteranomaly, tritanomaly, achromatopsia, achromatomaly).
-- [x] **Quick Toggle Bar** - Inject a minimal floating toolbar at the top of the page for fast switching between simulation types. Keyboard shortcut support (e.g., `Alt+Shift+1` through `Alt+Shift+8`).
-- [x] **Split-Screen Comparison** - Side-by-side view: left half of the page in normal vision, right half in simulated vision. Draggable divider.
-- [x] **Simulation-Aware Contrast Analysis** - Re-run the contrast matrix with simulated colors. "Under deuteranopia, 3 additional pairs drop below AA." Show which pairs are only problematic under specific simulations.
-- [x] **Low Vision Simulation** - Beyond color blindness: simulate blur (low acuity), reduced contrast sensitivity, and visual field loss. These affect more users than color blindness.
+- [ ] Add a lightweight bundler (esbuild or rollup) with no runtime dependencies in the output
+- [ ] Preserve the zero-dependency, no-transpilation principle -- bundle only, no transforms
+- [ ] Output the same file structure the manifest expects
 
 ---
 
-## Phase 5: WCAG 3.0 / APCA Deep Integration
+## Priority 2: Test the DOM Layer
 
-**Goal: Be the first tool that treats APCA as a first-class citizen, not an afterthought.**
+**Goal: Catch regressions where bugs actually live.**
 
-Every other tool bolts APCA on as a secondary score next to WCAG 2.1. ChromaCheck should be the tool that actually implements the APCA workflow as intended by its designers.
+The pure math in `shared/contrast.js` is tested. The DOM interaction layer -- where the extension spends 90% of its code and where real bugs happen -- is not.
 
-- [x] **APCA Lookup Table Integration** - Implement the full APCA Bronze/Silver/Gold conformance table. Map each Lc value to minimum font size and weight, not just a pass/fail threshold. Show "Lc 52: 18px/700 or 24px/400 minimum" instead of just "AA Large."
-- [x] **Font-Size-Aware Scoring** - The element picker already knows the element. Read its `font-size` and `font-weight`. Cross-reference with the APCA table to give a verdict specific to that element's actual typography: "This 14px/400 text needs Lc 75+, but only has Lc 58. Increase to 18px or boost contrast."
-- [x] **Polarity-Aware UI** - APCA distinguishes dark-on-light (positive Lc) from light-on-dark (negative Lc). Make this visible in the UI. Different thresholds apply to each polarity.
-- [ ] **WCAG 2.2 Compliance Mode** - Support WCAG 2.2 additions: focus appearance (SC 2.4.11, 2.4.12 -- 3:1 contrast for focus indicators), target size, and dragging movements. Detect focus styles on interactive elements and validate their contrast.
-- [x] **Standard Toggle** - Let users switch the primary scoring between "WCAG 2.1", "WCAG 2.2", and "APCA (WCAG 3.0 Draft)". Filter badges and pass/fail thresholds update accordingly. Default to the user's preferred standard.
-
----
-
-## Phase 6: Non-Text Contrast & Beyond Color
-
-**Goal: Contrast isn't just about text. Extend to everything WCAG covers.**
-
-WCAG 1.4.11 (Non-text Contrast) requires 3:1 for UI components and graphical objects. No browser extension handles this well.
-
-- [x] **UI Component Contrast** - Detect buttons, inputs, checkboxes, and other form controls. Check their border/outline contrast against their background. Flag inputs that disappear into their container.
-- [x] **Focus Indicator Audit** - Tab through the page programmatically. Capture the focus style of each interactive element. Check the focus indicator's contrast against both the element and its surrounding background.
-- [x] **Icon & SVG Contrast** - Detect inline SVGs and icon fonts. Measure their fill/stroke color against the background. Flag icons that rely solely on color to convey meaning.
-- [x] **Link Distinguishability** - WCAG 1.4.1 requires links within text to be distinguishable by more than color alone (or have 3:1 contrast with surrounding text). Detect links inside paragraphs, check if they have underlines or sufficient contrast against body text.
-- [x] **Placeholder Text Contrast** - Check `::placeholder` contrast against input backgrounds. This is one of the most commonly failed checks on the web.
-- [x] **Target Size Checking (WCAG 2.2)** - Measure interactive element dimensions against the new SC 2.5.8 requirement (24x24 CSS pixels minimum). Flag undersized buttons, links, and controls. This is WCAG 2.2's most automatable new success criterion and almost no tool checks it yet.
-- [x] **Dark Mode & Theme-Aware Testing** - Detect `prefers-color-scheme` media queries and CSS custom property theming. Toggle between light/dark/high-contrast modes and re-run the full analysis for each. "Your palette passes AA in light mode but has 6 failures in dark mode." Test `forced-colors` mode for Windows High Contrast users.
+- [ ] Create a test fixture HTML page with known contrast scenarios: semi-transparent overlays, nested opacity, hidden elements, shadow DOM, placeholder text, focus indicators, SVG icons, undersized targets
+- [ ] Add integration tests using Puppeteer or Playwright that load the fixture page, run the content script, and assert the detected pairs and issues match expected results
+- [ ] Test the element picker (hover produces correct tooltip data, click produces correct picked result)
+- [ ] Test CVD filter injection (filters are inserted, page filter style is applied, cleanup works)
+- [ ] Test effective background compositing against manually calculated expected values
+- [ ] Test visibility filtering (hidden elements are skipped, clipped elements are skipped, aria-hidden subtrees are skipped)
 
 ---
 
-## Phase 7: Reporting & Team Workflow
+## Priority 3: Harden the Scan-to-Fix Pipeline
 
-**Goal: Turn analysis into artifacts that drive organizational change.**
+**Goal: Make the core workflow bulletproof on real-world sites.**
 
-Individual developer tools don't change organizations. Reports, dashboards, and integrations do.
+This is the value proposition: scan -> find real issues -> suggest fixes -> preview -> copy CSS. Every edge case here erodes trust.
 
-- [x] **Exportable Audit Report** - One-click export to HTML, PDF, or JSON. The report includes: page URL, timestamp, total issues by severity, each failing pair with screenshot snippet, CSS selector, current values, and suggested fix.
-- [x] **CSV/JSON for CI Integration** - Export raw data in machine-readable format for ingestion into CI pipelines, dashboards, or accessibility tracking systems.
-- [x] **GitHub Issue Generator** - For each failure (or batch of failures), generate a pre-formatted GitHub issue with reproduction details, WCAG success criterion reference, and suggested fix. Uses the GitHub API via OAuth.
-- [x] **Comparison Across Pages** - Scan multiple pages on the same domain. Aggregate results: "Your site has 47 unique contrast failures across 12 pages. The 5 most impactful fixes would resolve 80% of them."
-- [x] **Design Token Extraction** - Detect CSS custom properties (`--color-primary`, `--bg-surface`, etc.) and Tailwind classes. Report issues in terms of the design system, not raw hex values: "Your `--text-muted` token fails AA on `--bg-surface`."
-
----
-
-## Phase 8: DevTools Integration
-
-**Goal: Meet developers where they already are -- in DevTools.**
-
-Power users live in DevTools. A dedicated panel there removes friction entirely.
-
-- [x] **DevTools Panel** - Register a "ChromaCheck" panel in Chrome DevTools via `devtools_page`. Show the full analysis UI alongside Elements, Console, and Network.
-- [x] **Elements Panel Integration** - In the Elements panel sidebar, show a "Contrast" pane for the currently inspected element. Auto-updates as you navigate the DOM tree.
-- [x] **Computed Style Annotations** - Augment the Computed tab with contrast ratios next to `color` and `background-color` properties. Green/yellow/red indicators.
-- [x] **Console Warnings** - Optionally inject `console.warn()` messages for each contrast failure found during page load. Developers see failures in their normal workflow without opening any panel.
+- [ ] Handle `currentColor` resolution (currently ignored, falls back to computed color)
+- [ ] Handle CSS custom properties as intermediate values in computed styles
+- [ ] Handle `calc()` expressions in font-size for APCA threshold lookups
+- [ ] Handle gradient backgrounds more accurately (currently reduced to single computed rgba; at minimum, sample the dominant stop)
+- [ ] Skip off-screen elements during initial scan and analyze them lazily on scroll (viewport-priority scanning)
+- [ ] Add severity-aware explanations that vary by how far the pair misses the threshold, not static per-type strings
+- [ ] Group-level fix preview (apply a single fix across all matching selectors, not just one element)
+- [ ] Improve fix suggestion for APCA mode (current suggestions target WCAG ratio; should target Lc threshold based on actual font size)
 
 ---
 
-## Phase 9: Performance & Polish
+## Priority 4: Honest the Feature Set
 
-**Goal: Handle real-world pages without breaking a sweat.**
+**Goal: Every claimed capability should work reliably or be removed/downgraded.**
 
-Production sites have 5,000+ DOM elements, complex stacking contexts, iframes, shadow DOM, and web components. The tool must be fast and correct on all of them.
+Several features are implemented thinly enough that they mislead users or contributors about the extension's actual capabilities.
 
-- [x] **Shadow DOM Traversal** - Pierce shadow roots (open) to extract colors from web components. Custom elements are increasingly common, and most tools ignore them entirely.
-- [x] **Iframe Analysis** - With appropriate permissions, analyze content inside same-origin iframes. Common in CMS platforms, embedded widgets, and design tools.
-- [ ] **Incremental Scanning** - Don't re-walk the entire DOM on every analysis. Use `MutationObserver` to track changes and only re-analyze affected subtrees.
-- [x] **Web Worker Offloading** - Move contrast calculations to a Web Worker so the main thread stays responsive during large-page scans.
-- [ ] **Viewport-Priority Scanning** - Analyze above-the-fold content first. Show initial results in <500ms, then progressively scan below-the-fold content.
+### Downgrade or rework
+
+- [ ] **Contrast matrix** -- Demote to a collapsed "Advanced" section. Element-pair issues are the primary view; the theoretical all-combinations matrix adds noise and splits attention.
+- [ ] **Split-screen comparison** -- Document the CSP/X-Frame-Options limitation prominently. Consider removing entirely if it can't work on most production sites. Evaluate using a canvas-based approach instead of iframe mirroring.
+- [ ] **Low vision simulation** -- Add a disclaimer that these are rough CSS approximations, not clinically calibrated simulations. Consider labeling as "preview" quality.
+- [ ] **Theme audit** -- Document that it only works for class/attribute-based theme toggles. JS-driven themes, SSR-rendered themes, and `prefers-color-scheme` media queries (as opposed to the `color-scheme` CSS property) are not supported.
+- [ ] **Domain comparison** -- Rename or reframe. It's scan history grouped by hostname, not automated cross-page crawling. Set expectations accurately in the UI.
+
+### Not yet implemented (remove false checkmarks)
+
+- [ ] **HTML/PDF report export** -- Only JSON export exists. Either build a self-contained HTML report or stop claiming HTML/PDF support.
+- [ ] **CLI / Node API** -- `shared/contrast.js` being CommonJS-exportable is not a CLI. Remove this claim until an actual CLI is built.
+- [ ] **Firefox validation** -- Manifest metadata is present but the extension has not been validated on Firefox. Remove the claim of full Firefox support until tested.
+- [ ] **WCAG 2.2 focus appearance (SC 2.4.11/2.4.12)** -- Focus indicator contrast is checked, but the full focus appearance criteria (minimum area, change of contrast) are not implemented.
 
 ---
 
-## Phase 10: Cross-Browser & Ecosystem
+## Priority 5: Self-Contained HTML Report
 
-**Goal: Go wherever the users are.**
+**Goal: Make audit results shareable without requiring the extension.**
 
-- [x] **Firefox Add-on** - Port to Firefox using WebExtension APIs (high compatibility with Manifest V3). Firefox's accessibility community is strong and underserved.
-- [x] **CLI / Node API** - Headless version for CI/CD pipelines. `npx chromacheck audit https://example.com --format=json --threshold=AA`. Exit code 1 on failures for pipeline gating.
+JSON export is useful for tooling but not for humans. A self-contained HTML report is the minimum viable artifact for team communication.
+
+- [ ] Generate a single `.html` file with all CSS inlined (no external dependencies)
+- [ ] Include: page URL, scan timestamp, settings used, issue count by severity
+- [ ] For each failing group: color swatches, contrast ratio/APCA score, selector list, suggested fix with before/after
+- [ ] For passing palette entries: color swatches with compliance badges
+- [ ] Design the report to pass its own contrast checks
+
+---
+
+## Future (not prioritized)
+
+These are valuable but should not be started until Priorities 1-5 are complete.
+
+- **Incremental scanning** -- Use MutationObserver to track changes and only re-analyze affected subtrees instead of full DOM walks
+- **CLI / headless mode** -- `npx chromacheck audit https://example.com --format=json --threshold=AA` using Puppeteer + the shared contrast library
+- **Firefox Add-on** -- Validate the extension on Firefox, fix any side-panel or DevTools API differences
+- **Figma plugin** -- Analyze contrast in design files before code is written
+- **CI integration** -- JSON output from CLI piped into GitHub Actions / GitLab CI with pass/fail exit codes
+- **Design token-aware reporting** -- Report issues in terms of design system tokens, not raw hex values: "Your `--text-muted` token fails AA on `--bg-surface`"
+- **WCAG 2.2 full compliance mode** -- Complete SC 2.4.11/2.4.12 (focus appearance area and contrast change), SC 2.4.13 (focus not obscured)
 
 ---
 
 ## Design Principles
 
-These guide every decision on the roadmap:
+These guide every decision:
 
-1. **Fix over flag.** Every failure should come with an actionable suggestion. Professionals don't need to be told something is broken -- they need to know the fastest path to fixing it.
+1. **Fix over flag.** Every failure comes with an actionable suggestion. Professionals don't need to be told something is broken -- they need the fastest path to fixing it.
 
-2. **APCA-native.** WCAG 3.0 is coming. Being ahead of the standard is a strategic advantage. ChromaCheck should be the tool people reach for when they want to understand what APCA means for their design.
+2. **APCA-native.** WCAG 3.0 is coming. Being ahead of the standard is a strategic advantage.
 
 3. **Context over extraction.** A flat color palette is a lie. Real accessibility issues live in the relationship between specific elements. Always show what's actually on the page.
 
-4. **Zero-dependency core.** The calculation engine stays pure, portable, and auditable. No npm install. No build step. The same `shared/contrast.js` that runs in the extension should run in the CLI tool.
+4. **Zero-dependency core.** The calculation engine stays pure, portable, and auditable. No npm install in the output. The same `shared/contrast.js` runs in the extension, tests, and future CLI.
 
 5. **Speed is a feature.** First results in under 500ms. A tool people avoid opening is a tool that doesn't improve accessibility.
 
-6. **Accessibility of the tool itself.** ChromaCheck must be fully keyboard-navigable, screen-reader-friendly, and pass its own contrast checks. We eat our own cooking.
+6. **Accessibility of the tool itself.** ChromaCheck must pass its own contrast checks. Keyboard-navigable. Screen-reader-friendly.
 
-7. **Teach, don't just test.** Tools that cite "WCAG 1.4.3" without explanation create compliance theater, not accessibility. Every finding should help the user understand the human impact.
+7. **Teach, don't just test.** Explanations should help users understand the human impact, not just cite WCAG success criteria.
 
-8. **Contrast-first, not everything-first.** ChromaCheck is not trying to replace axe for full WCAG automated testing. It is the contrast and color specialist that goes deeper than any general-purpose tool on visual accessibility. Own the niche.
+8. **Contrast-first, not everything-first.** This is not a replacement for axe. It's the contrast and color specialist that goes deeper than any general-purpose tool. Own the niche.
+
+9. **Depth over breadth.** Fewer features, each done well enough to be unquestionable. A thin implementation of 10 features is worse than a bulletproof implementation of 5.
 
 ---
 
 ## Competitive Positioning
 
-| Tool                         | Strength                            | ChromaCheck's Edge                                                                                                                      |
-| ---------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **axe DevTools**             | Gold-standard full WCAG engine      | axe buries contrast in a 200-item audit. We go deeper on color: palette matrix, APCA font tables, fix suggestions, color blindness sim. |
-| **WAVE**                     | Visual overlay, zero learning curve | WAVE clutters page layouts with icons and has no APCA, no palette analysis, no fix workflow. Dated UI.                                  |
-| **Stark**                    | Designer-first, Figma integration   | Stark paywalls real features. We're free, browser-native, and do live-page analysis Stark's extension can't match.                      |
-| **Lighthouse**               | Breadth, CI integration, scores     | Lighthouse gives a number but no workflow. We complement it: Lighthouse for breadth, ChromaCheck for depth on color.                    |
-| **Colour Contrast Analyser** | Trusted, simple                     | CCA is one pair at a time. We do full palette matrix, page extraction, and simulations in one tool.                                     |
-| **Polypane**                 | Built-in, multi-viewport            | Polypane requires switching browsers and paying. We work inside Chrome where developers already are.                                    |
-
-### What we deliberately don't build
-
-- **Full WCAG automated scanner.** axe-core has a decade head start and Deque's investment behind it. We complement, not compete.
-- **CI/CD integration (early).** The interactive, visual, in-browser experience is the differentiator. CLI comes after the core experience is polished.
+| Tool | Strength | ChromaCheck's Edge |
+|------|----------|--------------------|
+| **axe DevTools** | Gold-standard full WCAG engine | axe buries contrast in a 200-item audit. We go deeper: element-pair detection, APCA font tables, fix suggestions, CVD simulation. |
+| **WAVE** | Visual overlay, zero learning curve | No APCA, no palette analysis, no fix workflow. Dated UI. |
+| **Stark** | Designer-first, Figma integration | Paywalls real features. We're free, browser-native, live-page analysis. |
+| **Lighthouse** | Breadth, CI integration, scores | Gives a number but no workflow. We complement: Lighthouse for breadth, ChromaCheck for depth. |
+| **Colour Contrast Analyser** | Trusted, simple | One pair at a time. We do full page extraction and simulations in one tool. |
+| **Polypane** | Built-in, multi-viewport | Requires switching browsers and paying. We work inside Chrome. |

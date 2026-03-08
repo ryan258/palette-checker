@@ -21,7 +21,7 @@ ChromaCheck is a contrast-first accessibility tool that understands both current
 
 Firefox manifest metadata is included, but the Chrome/Edge side-panel workflow is the primary validated path in this repo.
 
-No build step, no npm install -- the extension runs as-is.
+The popup loads ES modules directly. The bundled content script in `content/content.js` is checked in, so you only need `./build.sh` after changing files under `content/`.
 
 ## What It Does
 
@@ -47,12 +47,13 @@ chrome-extension/
 |-- manifest.json              # Manifest V3 configuration
 |-- background.js              # Service worker (enables side panel)
 |-- content/
-|   +-- content.js             # DOM analysis, color extraction, simulations
+|   |-- index.js               # Content-script entrypoint source
+|   +-- content.js             # Bundled content script loaded by the manifest
 |-- shared/
 |   +-- contrast.js            # Pure contrast math (WCAG, APCA, CVD, fixes)
 |-- popup/
 |   |-- popup.html             # Side panel UI
-|   |-- popup.js               # State management & rendering
+|   |-- index.js               # Side panel entrypoint
 |   |-- popup.css              # Dark theme design system
 |   +-- analysis-worker.js     # Web Worker for off-thread calculations
 |-- devtools/
