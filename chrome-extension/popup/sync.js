@@ -1,6 +1,6 @@
 import { PICKER_PENDING_MESSAGE } from './constants.js';
 import { state } from './state.js';
-import { statusBanner } from './dom-elements.js';
+import { statusBanner, pickerBtn } from './dom-elements.js';
 import { getActiveTab, sendToTab, sendToContent } from './messaging.js';
 import { readPickerState, loadSavedAnalysis, saveSettings } from './storage.js';
 import { deriveDomain, isInspectablePageUrl } from './utils.js';
@@ -53,13 +53,13 @@ export async function handlePageMutation(sourceTabId) {
 
   // Don't sync if we haven't scanned yet or if picker is active
   if (!state.palette.length) return;
+  if (pickerBtn.classList.contains("active")) return;
   if (!Number.isInteger(sourceTabId)) return;
   if (sourceTabId !== state.observedTabId) return;
 
   const activeTab = await getActiveTab();
   if (!activeTab?.id || activeTab.id !== sourceTabId) return;
 
-  console.log("Auto-syncing analysis due to page mutation...");
   await handleExtract();
 }
 export async function getPageContext() {
@@ -108,7 +108,7 @@ export async function syncPickerStateFromStorage() {
 
   if (pickerState.status === "pending") {
     setPickerActive(true);
-    renderStatusBanner(PICKER_PENDING_MESSAGE, "info");
+    renderStatusBanner(PICKER_PENDING_MESSAGE, "info", { persistent: true });
     clearPickedView();
     return;
   }
@@ -160,7 +160,6 @@ export async function syncWorkspaceFromActiveTab() {
   renderIssues();
   renderPalette();
   renderCombinations();
-  clearStatusBanner();
   await syncPickerStateFromStorage();
   if (token !== syncToken) return;
 

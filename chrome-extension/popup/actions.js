@@ -313,7 +313,7 @@ export async function handlePicker() {
     updatedAt: Date.now(),
   });
   setPickerActive(true);
-  renderStatusBanner(PICKER_PENDING_MESSAGE, "info");
+  renderStatusBanner(PICKER_PENDING_MESSAGE, "info", { persistent: true });
 
   const response = await sendToContent({ action: "startPicker" });
   if (response?.ok) return;

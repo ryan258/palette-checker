@@ -1,3 +1,4 @@
+import { buildCombinationsData, buildIssuesData } from '../shared/contrast.esm.js';
 import { DOMAIN_COMPARISON_LIMIT } from './constants.js';
 import { state } from './state.js';
 import { deriveDomain, getIssueStableKey, normalizeSavedScan } from './utils.js';
@@ -164,6 +165,10 @@ export async function recomputeAnalysis({
 
   if (!pairs.length && preserveIssues) {
     state.combinations = buildCombinationsData(colors, state.settings);
+    // Re-score saved issues against current settings (standard/CVD may have changed)
+    if (state.issues.length) {
+      state.issues = buildIssuesData(state.issues, state.settings);
+    }
     return;
   }
 
@@ -175,7 +180,7 @@ export async function recomputeAnalysis({
   state.combinations = result.combinations;
   state.issues = preserveIssues && !pairs.length ? state.issues : result.issues;
 }
-export function computeDomainComparison(analyses, domain, activeUrl) {
+export function computeDomainComparison(analyses, domain, activeUrl, settings) {
   if (!domain || domain === "Current page") return null;
 
   const pages = Object.entries(analyses)
@@ -187,12 +192,17 @@ export function computeDomainComparison(analyses, domain, activeUrl) {
       if (!latest?.extractedAt) return null;
       if (deriveDomain(url) !== domain) return null;
 
+      // Re-score saved issues under the active standard/CVD
+      const rescoredIssues = settings
+        ? buildIssuesData(latest.issues, settings)
+        : latest.issues;
+
       return {
         url,
         title: latest.title || url,
         extractedAt: latest.extractedAt,
-        issueCount: latest.issues.length,
-        issues: latest.issues,
+        issueCount: rescoredIssues.length,
+        issues: rescoredIssues,
         isActive: url === activeUrl,
       };
     })

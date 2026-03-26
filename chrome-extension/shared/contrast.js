@@ -578,6 +578,68 @@ function buildIssuesData(pairs, settings) {
     .slice(0, 500);
 }
 
+// --- Shared UI Utilities ---
+// Used by sidebar.js, render.js, and other UI consumers.
+
+function parseRGBA(str) {
+  if (!str || str === "transparent") return { r: 0, g: 0, b: 0, a: 0 };
+  var match = str.match(
+    /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)/,
+  );
+  if (!match) return null;
+  return {
+    r: parseInt(match[1], 10),
+    g: parseInt(match[2], 10),
+    b: parseInt(match[3], 10),
+    a: match[4] !== undefined ? parseFloat(match[4]) : 1,
+  };
+}
+
+function componentsToHex(color) {
+  return (
+    "#" +
+    Math.round(color.r).toString(16).padStart(2, "0") +
+    Math.round(color.g).toString(16).padStart(2, "0") +
+    Math.round(color.b).toString(16).padStart(2, "0")
+  );
+}
+
+function escapeHtml(str) {
+  if (typeof document !== "undefined") {
+    var div = document.createElement("div");
+    div.textContent = str == null ? "" : String(str);
+    return div.innerHTML;
+  }
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function getStatusBadgeClass(level) {
+  switch (level) {
+    case "AAA":
+      return "status-aaa";
+    case "AA":
+      return "status-aa";
+    case "AA Large":
+      return "status-large";
+    default:
+      return "status-fail";
+  }
+}
+
+function getScoreTone(level) {
+  return level === "Fail" ? "fail" : "pass";
+}
+
+function parseShadowColor(boxShadow) {
+  if (!boxShadow || boxShadow === "none") return null;
+  var matches = boxShadow.match(/rgba?\([^)]+\)/g);
+  return matches ? matches[matches.length - 1] : null;
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     APCA_BCO,
@@ -587,6 +649,8 @@ if (typeof module !== "undefined" && module.exports) {
     buildCombinationsData,
     buildIssuesData,
     calcAPCA,
+    componentsToHex,
+    escapeHtml,
     expandHex,
     formatAPCAScore,
     formatContrastRatio,
@@ -599,6 +663,8 @@ if (typeof module !== "undefined" && module.exports) {
     getContrastRatio,
     getLevelRank,
     getRelativeLuminance,
+    getScoreTone,
+    getStatusBadgeClass,
     getSuggestedFixes,
     hexToHsl,
     hexToRgb,
@@ -606,6 +672,8 @@ if (typeof module !== "undefined" && module.exports) {
     isTransparent,
     isValidHex,
     normalizeStandard,
+    parseRGBA,
+    parseShadowColor,
     rgbStringToHex,
     shouldAnalyzePair,
     shouldIncludeIssueType,

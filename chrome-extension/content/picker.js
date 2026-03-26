@@ -70,11 +70,24 @@ export function handlePickerMove(e) {
   tooltip.style.display = "block";
   tooltip.style.left = e.clientX + 16 + "px";
   tooltip.style.top = e.clientY + 16 + "px";
-  tooltip.innerHTML =
-    `<span style="color:${fg};background:${bg};padding:2px 6px;border-radius:3px;">Aa</span> ` +
-    `Text: ${fg.toUpperCase()}<br>` +
-    `<span style="display:inline-block;width:10px;height:10px;background:${bg};border:1px solid rgba(255,255,255,0.3);border-radius:2px;"></span> ` +
-    `Bg: ${bg.toUpperCase()}`;
+  tooltip.textContent = "";
+
+  const preview = document.createElement("span");
+  preview.style.cssText = "padding:2px 6px;border-radius:3px;";
+  preview.style.color = fg;
+  preview.style.backgroundColor = bg;
+  preview.textContent = "Aa";
+  tooltip.appendChild(preview);
+
+  tooltip.appendChild(document.createTextNode(` Text: ${fg.toUpperCase()}`));
+  tooltip.appendChild(document.createElement("br"));
+
+  const swatch = document.createElement("span");
+  swatch.style.cssText = "display:inline-block;width:10px;height:10px;border:1px solid rgba(255,255,255,0.3);border-radius:2px;";
+  swatch.style.backgroundColor = bg;
+  tooltip.appendChild(swatch);
+
+  tooltip.appendChild(document.createTextNode(` Bg: ${bg.toUpperCase()}`));
 }
 export function handlePickerClick(e) {
   e.preventDefault();

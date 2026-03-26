@@ -42,7 +42,7 @@ export function resolveTrackedElement(id) {
 export function extractColors() {
   const colorCounts = new Map();
 
-  const elements = document.querySelectorAll("html, body, body *");
+  const elements = queryAllDeep("*");
   for (const el of elements) {
     if (!isVisible(el)) continue;
 
@@ -195,7 +195,11 @@ export function extractElementPairs() {
     }
   }
 
+  // Start text traversal
+  walkNodes(document.body);
+
   // Phase 6: Link Distinguishability (WCAG 1.4.1)
+  // Runs after walkNodes so we can skip links already processed as text pairs.
   queryAllDeep("p a, li a, blockquote a, dd a, dt a").forEach((linkEl) => {
     const parentEl = linkEl.parentElement;
     if (!parentEl || !isVisible(linkEl)) return;
@@ -228,9 +232,6 @@ export function extractElementPairs() {
       }
     }
   });
-
-  // Start text traversal
-  walkNodes(document.body);
 
   // Phase 6: SVGs and Non-text Contrast
   queryAllDeep("svg, path, circle, rect, polygon").forEach((svgEl) => {
@@ -288,7 +289,6 @@ export function extractElementPairs() {
     const style = window.getComputedStyle(el);
     // Check borders if they have width
     const borderDirs = ["Top", "Right", "Bottom", "Left"];
-    let hasBorder = false;
     for (const dir of borderDirs) {
       if (
         parseFloat(style[`border${dir}Width`]) > 0 &&
@@ -320,7 +320,6 @@ export function extractElementPairs() {
               fontWeight: "400",
               type: "non-text",
             });
-            hasBorder = true;
             break; // Just log one border fail per element to reduce noise
           }
         }

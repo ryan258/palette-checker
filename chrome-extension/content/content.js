@@ -239,7 +239,7 @@
   }
   function extractColors() {
     const colorCounts = /* @__PURE__ */ new Map();
-    const elements = document.querySelectorAll("html, body, body *");
+    const elements = queryAllDeep("*");
     for (const el of elements) {
       if (!isVisible(el)) continue;
       const style = window.getComputedStyle(el);
@@ -370,6 +370,7 @@
         }
       }
     }
+    walkNodes(document.body);
     queryAllDeep("p a, li a, blockquote a, dd a, dt a").forEach((linkEl) => {
       const parentEl = linkEl.parentElement;
       if (!parentEl || !isVisible(linkEl)) return;
@@ -396,7 +397,6 @@
         }
       }
     });
-    walkNodes(document.body);
     queryAllDeep("svg, path, circle, rect, polygon").forEach((svgEl) => {
       if (processed.has(svgEl)) return;
       if (!isContentVisible(svgEl)) return;
@@ -443,7 +443,6 @@
       if (!isContentVisible(el)) return;
       const style = window.getComputedStyle(el);
       const borderDirs = ["Top", "Right", "Bottom", "Left"];
-      let hasBorder = false;
       for (const dir of borderDirs) {
         if (parseFloat(style[`border${dir}Width`]) > 0 && style[`border${dir}Style`] !== "none") {
           const borderRgba = parseRGBA(style[`border${dir}Color`]);
@@ -472,7 +471,6 @@
                 fontWeight: "400",
                 type: "non-text"
               });
-              hasBorder = true;
               break;
             }
           }
@@ -583,7 +581,20 @@
     tooltip.style.display = "block";
     tooltip.style.left = e.clientX + 16 + "px";
     tooltip.style.top = e.clientY + 16 + "px";
-    tooltip.innerHTML = `<span style="color:${fg};background:${bg};padding:2px 6px;border-radius:3px;">Aa</span> Text: ${fg.toUpperCase()}<br><span style="display:inline-block;width:10px;height:10px;background:${bg};border:1px solid rgba(255,255,255,0.3);border-radius:2px;"></span> Bg: ${bg.toUpperCase()}`;
+    tooltip.textContent = "";
+    const preview = document.createElement("span");
+    preview.style.cssText = "padding:2px 6px;border-radius:3px;";
+    preview.style.color = fg;
+    preview.style.backgroundColor = bg;
+    preview.textContent = "Aa";
+    tooltip.appendChild(preview);
+    tooltip.appendChild(document.createTextNode(` Text: ${fg.toUpperCase()}`));
+    tooltip.appendChild(document.createElement("br"));
+    const swatch = document.createElement("span");
+    swatch.style.cssText = "display:inline-block;width:10px;height:10px;border:1px solid rgba(255,255,255,0.3);border-radius:2px;";
+    swatch.style.backgroundColor = bg;
+    tooltip.appendChild(swatch);
+    tooltip.appendChild(document.createTextNode(` Bg: ${bg.toUpperCase()}`));
   }
   function handlePickerClick(e) {
     e.preventDefault();
@@ -704,16 +715,18 @@
     }, 3e3);
     return true;
   }
+  var IS_MAC = /Macintosh|Mac OS/.test(navigator.userAgent);
+  var SHORTCUT_PREFIX = IS_MAC ? "\u2325\u21E7" : "Alt+Shift+";
   var CVD_OPTIONS = [
-    { type: "none", label: "Normal", shortcut: "0" },
-    { type: "protanopia", label: "P", shortcut: "1" },
-    { type: "protanomaly", label: "Pw", shortcut: "2" },
-    { type: "deuteranopia", label: "D", shortcut: "3" },
-    { type: "deuteranomaly", label: "Dw", shortcut: "4" },
-    { type: "tritanopia", label: "T", shortcut: "5" },
-    { type: "tritanomaly", label: "Tw", shortcut: "6" },
-    { type: "achromatopsia", label: "Mono", shortcut: "7" },
-    { type: "achromatomaly", label: "Low", shortcut: "8" }
+    { type: "none", label: "Normal", shortcut: "0", desc: "No simulation \u2014 original page colors" },
+    { type: "protanopia", label: "P", shortcut: "1", desc: "Protanopia \u2014 red-blind, no red cones (~1% of males)" },
+    { type: "protanomaly", label: "Pw", shortcut: "2", desc: "Protanomaly \u2014 red-weak, reduced red sensitivity (~1% of males)" },
+    { type: "deuteranopia", label: "D", shortcut: "3", desc: "Deuteranopia \u2014 green-blind, no green cones (~1% of males)" },
+    { type: "deuteranomaly", label: "Dw", shortcut: "4", desc: "Deuteranomaly \u2014 green-weak, most common CVD (~5% of males)" },
+    { type: "tritanopia", label: "T", shortcut: "5", desc: "Tritanopia \u2014 blue-blind, no blue cones (very rare, <0.01%)" },
+    { type: "tritanomaly", label: "Tw", shortcut: "6", desc: "Tritanomaly \u2014 blue-weak, reduced blue sensitivity (very rare)" },
+    { type: "achromatopsia", label: "Mono", shortcut: "7", desc: "Achromatopsia \u2014 total color blindness, greyscale only (~0.003%)" },
+    { type: "achromatomaly", label: "Low", shortcut: "8", desc: "Achromatomaly \u2014 partial color blindness, severely desaturated" }
   ];
   var LOW_VISION_OPTIONS = {
     none: { label: "Off", filter: "" },
@@ -732,6 +745,7 @@
   };
   var cvdToolbar = null;
   var cvdToolbarStyle = null;
+  var cvdPip = null;
   var cvdShortcutBound = false;
   var splitOverlay = null;
   var splitPane = null;
@@ -769,12 +783,19 @@
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
         font: 11px/1.2 ui-monospace, SFMono-Regular, monospace;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+      #chromacheck-cvd-toolbar.chromacheck-collapsed {
+        pointer-events: none;
+        opacity: 0;
+        transform: translateX(-50%) translateY(-8px);
       }
       #chromacheck-cvd-toolbar .chromacheck-toolbar-label {
         color: #94a3b8;
         margin-right: 4px;
       }
       #chromacheck-cvd-toolbar button {
+        position: relative;
         min-width: 30px;
         min-height: 28px;
         padding: 0 8px;
@@ -788,6 +809,49 @@
         border-color: rgba(56, 189, 248, 0.6);
         background: rgba(56, 189, 248, 0.18);
         color: #d6f3ff;
+      }
+      #chromacheck-cvd-toolbar .chromacheck-toolbar-close {
+        min-width: 22px;
+        min-height: 22px;
+        padding: 0;
+        margin-left: 2px;
+        font-size: 13px;
+        line-height: 1;
+        opacity: 0.5;
+        border: none;
+        background: transparent;
+      }
+      #chromacheck-cvd-toolbar .chromacheck-toolbar-close:hover {
+        opacity: 1;
+      }
+      #chromacheck-cvd-pip {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2147483645;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(2, 6, 23, 0.88);
+        color: #e2e8f0;
+        box-shadow: 0 6px 18px rgba(2, 6, 23, 0.35);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        cursor: pointer;
+        font-size: 14px;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+      }
+      #chromacheck-cvd-pip:hover {
+        border-color: rgba(56, 189, 248, 0.5);
+        background: rgba(56, 189, 248, 0.18);
+      }
+      #chromacheck-cvd-pip.chromacheck-visible {
+        display: flex;
       }
       #chromacheck-split-view {
         position: fixed;
@@ -857,26 +921,43 @@
     cvdToolbar = document.createElement("div");
     cvdToolbar.id = "chromacheck-cvd-toolbar";
     cvdToolbar.innerHTML = `
-    <span class="chromacheck-toolbar-label">Alt+Shift</span>
+    <span class="chromacheck-toolbar-label">${IS_MAC ? "\u2325\u21E7" : "Alt+Shift"}</span>
     ${CVD_OPTIONS.map(
       (option) => `
         <button
           type="button"
           data-cvd-type="${option.type}"
           data-active="${option.type === visionState.cvdMode}"
-          title="${option.type} (${option.shortcut})"
+          title="${option.desc} [${SHORTCUT_PREFIX}${option.shortcut}]"
         >
           ${option.label}
         </button>
       `
     ).join("")}
+    <button type="button" class="chromacheck-toolbar-close" title="Hide toolbar">\xD7</button>
   `;
     cvdToolbar.addEventListener("click", (event) => {
+      if (event.target.closest(".chromacheck-toolbar-close")) {
+        cvdToolbar.classList.add("chromacheck-collapsed");
+        cvdPip?.classList.add("chromacheck-visible");
+        return;
+      }
       const button = event.target.closest("button[data-cvd-type]");
       if (!button) return;
       applyColorBlindnessMode(button.dataset.cvdType, true);
     });
     document.body.appendChild(cvdToolbar);
+    if (!cvdPip) {
+      cvdPip = document.createElement("div");
+      cvdPip.id = "chromacheck-cvd-pip";
+      cvdPip.title = "Show CVD simulation toolbar";
+      cvdPip.textContent = "\u{1F441}";
+      cvdPip.addEventListener("click", () => {
+        cvdToolbar?.classList.remove("chromacheck-collapsed");
+        cvdPip.classList.remove("chromacheck-visible");
+      });
+      document.body.appendChild(cvdPip);
+    }
   }
   function syncCvdToolbar() {
     if (!cvdToolbar) return;
@@ -885,6 +966,10 @@
         button.dataset.cvdType === visionState.cvdMode
       );
     });
+    if (visionState.cvdMode === "none" && visionState.lowVisionMode === "none") {
+      cvdToolbar.classList.remove("chromacheck-collapsed");
+      cvdPip?.classList.remove("chromacheck-visible");
+    }
   }
   function getCombinedVisionFilter() {
     const filters = [];

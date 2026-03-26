@@ -1,21 +1,6 @@
 import { PICKER_STATE_KEY, ANALYSIS_BY_URL_KEY, PINNED_ITEMS_KEY, MAX_SAVED_ANALYSES, MAX_HISTORY_PER_PAGE, SETTINGS_KEY } from './constants.js';
 import { state } from './state.js';
 import { getIssueStableKey, normalizeSavedScan } from './utils.js';
-export function storageGet(keys) {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(keys, resolve);
-  });
-}
-export function storageSet(values) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set(values, resolve);
-  });
-}
-export function storageRemove(keys) {
-  return new Promise((resolve) => {
-    chrome.storage.local.remove(keys, resolve);
-  });
-}
 export async function loadSettings() {
   const result = await chrome.storage.local.get([SETTINGS_KEY]);
   if (result[SETTINGS_KEY]) {
@@ -26,21 +11,21 @@ export async function saveSettings() {
   await chrome.storage.local.set({ [SETTINGS_KEY]: state.settings });
 }
 export async function readPickerState() {
-  const stored = await storageGet(PICKER_STATE_KEY);
+  const stored = await chrome.storage.local.get([PICKER_STATE_KEY]);
   return stored[PICKER_STATE_KEY] || null;
 }
 export async function writePickerState(pickerState) {
-  await storageSet({ [PICKER_STATE_KEY]: pickerState });
+  await chrome.storage.local.set({ [PICKER_STATE_KEY]: pickerState });
 }
 export async function clearPickerState() {
-  await storageRemove(PICKER_STATE_KEY);
+  await chrome.storage.local.remove(PICKER_STATE_KEY);
 }
 export async function readAnalysisMap() {
-  const stored = await storageGet(ANALYSIS_BY_URL_KEY);
+  const stored = await chrome.storage.local.get([ANALYSIS_BY_URL_KEY]);
   return stored[ANALYSIS_BY_URL_KEY] || {};
 }
 export async function writeAnalysisMap(analyses) {
-  await storageSet({ [ANALYSIS_BY_URL_KEY]: analyses });
+  await chrome.storage.local.set({ [ANALYSIS_BY_URL_KEY]: analyses });
 }
 export async function saveAnalysisForCurrentPage(scanOrPalette, extractedAt) {
   if (!state.pageContext.url) return;

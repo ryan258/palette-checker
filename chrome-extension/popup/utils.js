@@ -1,3 +1,4 @@
+import { formatAPCAScore, formatContrastRatio, getSuggestedFixes } from '../shared/contrast.esm.js';
 import { state } from './state.js';
 
 export function deriveDomain(url) {

@@ -19,7 +19,12 @@ chrome.devtools.panels.elements.createSidebarPane("Contrast", (sidebar) => {
 
   // Listen for selection changes in the Elements panel
   chrome.devtools.panels.elements.onSelectionChanged.addListener(() => {
-    // Evaluate script in the context of the inspected window to get computed styles
+    // Evaluate script in the context of the inspected window to get computed styles.
+    // NOTE: getMinimalSelector and getEffectiveBackground are duplicated here because
+    // chrome.devtools.inspectedWindow.eval runs in the page context where extension
+    // modules are unavailable. Canonical implementations live in:
+    //   - getMinimalSelector: content/dom-utils.js
+    //   - getEffectiveBackground: content/picker.js (getEffectiveBg)
     const evalString = `
         (function() {
           const el = $0;

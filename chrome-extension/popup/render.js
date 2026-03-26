@@ -1,3 +1,4 @@
+import { buildCombinationsData, buildIssuesData, calcAPCA, formatAPCAScore, formatContrastRatio, getAPCAComplianceLevel, getAPCAPolarity, getAPCARecommendationDetails, getContextualComplianceLevel, getContrastRatio, getRelativeLuminance } from '../shared/contrast.esm.js';
 import { EXTRACT_LABEL, EXTRACT_LOADING_LABEL, EMPTY_STATE_DEFAULT, EMPTY_STATE_UNSUPPORTED } from './constants.js';
 import { state } from './state.js';
 import { extractBtn, focusAuditBtn, themeAuditBtn, pickerBtn, pageTitle, pageUrl, pageDomain, scanStatus, statusBanner, metricColors, metricColorsDetail, metricPairs, metricPairsDetail, metricFails, metricFailsDetail, metricPass, metricPassDetail, paletteSection, paletteSwatches, colorCount, pickedSection, pickedResult, resultsSection, resultsCount, combinationsGrid, issuesSection, issuesList, issuesCount, batchCount, batchCopyBtn, batchClearBtn, diffSection, diffSummary, diffMeta, themeSection, themeSummary, themeList, themeCount, domainSection, domainSummary, domainList, domainCount, emptyState, historySection, historyList, historyCount, pinnedSection, pinnedList, pinnedCount } from './dom-elements.js';
@@ -27,7 +28,7 @@ export function render() {
   renderDomainComparison();
   renderCombinations();
   renderPinned();
-  clearStatusBanner();
+  clearTransientBanner();
   updateEmptyStateVisibility();
 }
 export function clearAnalysis() {
@@ -69,10 +70,12 @@ export async function refreshHistory() {
   const history = Array.isArray(rawHistory)
     ? rawHistory.map(normalizeSavedScan)
     : [normalizeSavedScan(rawHistory)];
+  const settings = state.settings;
   state.domainComparison = computeDomainComparison(
     analyses,
     state.pageContext.domain,
     activeUrl,
+    settings,
   );
   const activeIndex = history.findIndex(
     (scan) => scan.extractedAt === activeExtractedAt,
@@ -80,10 +83,14 @@ export async function refreshHistory() {
   const currentScan = history[activeIndex >= 0 ? activeIndex : 0] || null;
   const previousScan =
     activeIndex >= 0 ? history[activeIndex + 1] || null : history[1] || null;
-  state.scanDiff =
-    currentScan && previousScan
-      ? computeScanDiff(previousScan, currentScan.issues)
-      : null;
+  if (currentScan && previousScan) {
+    // Re-score both scans under the active standard/CVD before diffing
+    const rescoredPrevious = { ...previousScan, issues: buildIssuesData(previousScan.issues, settings) };
+    const rescoredCurrentIssues = buildIssuesData(currentScan.issues, settings);
+    state.scanDiff = computeScanDiff(rescoredPrevious, rescoredCurrentIssues);
+  } else {
+    state.scanDiff = null;
+  }
 
   if (history.length <= 1) {
     state.scanDiff = null;
@@ -267,15 +274,22 @@ export function renderDomainComparison() {
     domainList.appendChild(row);
   });
 }
-export function renderStatusBanner(message, tone = "info") {
+export function renderStatusBanner(message, tone = "info", { persistent = false } = {}) {
   statusBanner.textContent = message;
   statusBanner.className = `status-banner ${tone}`;
   statusBanner.style.display = "";
+  statusBanner.toggleAttribute("data-persistent", persistent);
 }
 export function clearStatusBanner() {
   statusBanner.textContent = "";
   statusBanner.className = "status-banner";
   statusBanner.style.display = "none";
+  statusBanner.removeAttribute("data-persistent");
+}
+export function clearTransientBanner() {
+  if (!statusBanner.hasAttribute("data-persistent")) {
+    clearStatusBanner();
+  }
 }
 export function setExtractLoading(isLoading) {
   state.isExtracting = isLoading;
@@ -733,22 +747,26 @@ export function buildIssueGroupElement(group) {
           </div>
         </div>
         ${
-          state.settings.githubRepoUrl
-            ? `
+          (() => {
+            try {
+              const repoUrl = state.settings.githubRepoUrl;
+              if (!repoUrl) return "";
+              const parsed = new URL(repoUrl);
+              if (parsed.protocol !== "https:") return "";
+              const safeBase = parsed.href.replace(/\/$/, "");
+              return `
         <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; display: flex; justify-content: flex-end;">
-          <a href="${state.settings.githubRepoUrl.replace(
-            /\/$/,
-            "",
-          )}/issues/new?title=${encodeURIComponent(
-            `[a11y] ${groupTitle} affecting ${group.count} selectors`,
-          )}&body=${encodeURIComponent(
-            `**WCAG Score:** ${formatContrastRatio(issue.wcagRatio)} (${issue.wcagLevel})\n**APCA Score:** ${formatAPCAScore(issue.apcaScore)} (${issue.apcaLevel})\n**Representative Selector:** \`${issue.selector}\`\n**Affected Selectors:** ${group.count}\n\n${affectedSelectorLines}${group.count > 10 ? `\n- ...and ${group.count - 10} more` : ""}\n\n**Current Value:**\n- Text: \`${issue.textColor}\`\n- Background: \`${issue.bgColor}\`\n\n**Suggested Fixes:**\n${githubFixLines}\n\n**Impact:** ${getIssueExplanation(issue)}`,
-          )}" target="_blank" class="btn-xs" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
+          <a href="${escapeHtml(safeBase)}/issues/new?title=${encodeURIComponent(
+                `[a11y] ${groupTitle} affecting ${group.count} selectors`,
+              )}&body=${encodeURIComponent(
+                `**WCAG Score:** ${formatContrastRatio(issue.wcagRatio)} (${issue.wcagLevel})\n**APCA Score:** ${formatAPCAScore(issue.apcaScore)} (${issue.apcaLevel})\n**Representative Selector:** \`${issue.selector}\`\n**Affected Selectors:** ${group.count}\n\n${affectedSelectorLines}${group.count > 10 ? `\n- ...and ${group.count - 10} more` : ""}\n\n**Current Value:**\n- Text: \`${issue.textColor}\`\n- Background: \`${issue.bgColor}\`\n\n**Suggested Fixes:**\n${githubFixLines}\n\n**Impact:** ${getIssueExplanation(issue)}`,
+              )}" target="_blank" rel="noopener noreferrer" class="btn-xs" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.2);">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
             Create Issue
           </a>
-        </div>`
-            : ""
+        </div>`;
+            } catch { return ""; }
+          })()
         }
       </div>
     `;

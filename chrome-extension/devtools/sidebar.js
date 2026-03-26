@@ -1,25 +1,5 @@
-function parseRGBA(str) {
-  if (!str || str === "transparent") return { r: 0, g: 0, b: 0, a: 0 };
-  const match = str.match(
-    /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)/,
-  );
-  if (!match) return null;
-  return {
-    r: parseInt(match[1], 10),
-    g: parseInt(match[2], 10),
-    b: parseInt(match[3], 10),
-    a: match[4] !== undefined ? parseFloat(match[4]) : 1,
-  };
-}
-
-function componentsToHex(c) {
-  return (
-    "#" +
-    Math.round(c.r).toString(16).padStart(2, "0") +
-    Math.round(c.g).toString(16).padStart(2, "0") +
-    Math.round(c.b).toString(16).padStart(2, "0")
-  );
-}
+// parseRGBA, componentsToHex, escapeHtml, getStatusBadgeClass, getScoreTone,
+// and parseShadowColor are provided by shared/contrast.js loaded in sidebar.html.
 
 function getRenderedPair(fgRgb, bgRgb) {
   const fg = parseRGBA(fgRgb);
@@ -38,35 +18,6 @@ function getRenderedPair(fgRgb, bgRgb) {
     text: blendedText,
     background: bg,
   };
-}
-
-function escapeHtml(value) {
-  const div = document.createElement("div");
-  div.textContent = value == null ? "" : String(value);
-  return div.innerHTML;
-}
-
-function getStatusBadgeClass(level) {
-  switch (level) {
-    case "AAA":
-      return "status-aaa";
-    case "AA":
-      return "status-aa";
-    case "AA Large":
-      return "status-large";
-    default:
-      return "status-fail";
-  }
-}
-
-function getScoreTone(level) {
-  return level === "Fail" ? "fail" : "pass";
-}
-
-function parseShadowColor(boxShadow) {
-  if (!boxShadow || boxShadow === "none") return null;
-  const matches = boxShadow.match(/rgba?\([^)]+\)/g);
-  return matches?.[matches.length - 1] || null;
 }
 
 function getHexFromColor(value) {

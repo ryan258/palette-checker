@@ -211,8 +211,11 @@
 
       <section id="issues-section" class="panel-card" style="display: none">
         <div class="section-header section-header-stack">
-          <div>
-            <h2>Page Issues</h2>
+          <div class="section-intro">
+            <div class="section-title-row">
+              <h2>Page Issues</h2>
+              <span id="issues-count" class="count-indicator"></span>
+            </div>
             <p class="section-subcopy">
               Real text-on-background pairs detected in the DOM, grouped by
               repeated issue signature.
@@ -220,7 +223,6 @@
           </div>
           <div class="filter-tools filter-tools-issues">
             <div class="filter-summary-row">
-              <span id="issues-count" class="count-indicator"></span>
               <div class="batch-tools batch-tools-inline">
                 <span id="batch-count" class="count-indicator"></span>
                 <div class="batch-actions">
@@ -324,14 +326,16 @@
 
       <section id="results-section" class="panel-card" style="display: none">
         <div class="section-header section-header-stack">
-          <div>
-            <h2>Contrast Matrix</h2>
+          <div class="section-intro">
+            <div class="section-title-row">
+              <h2>Contrast Matrix</h2>
+              <span id="results-count" class="count-indicator"></span>
+            </div>
             <p class="section-subcopy">
               Sorted by WCAG risk so failing pairs surface first.
             </p>
           </div>
-          <div class="filter-tools">
-            <span id="results-count" class="count-indicator"></span>
+          <div class="filter-tools filter-tools-results">
             <div
               class="legend"
               id="filter-legend"

@@ -41,7 +41,10 @@ paletteSwatches.addEventListener("click", (e) => {
   }
 });
 
-settingsBtn.addEventListener("click", () => {
+let settingsReturnFocus = null;
+
+function openSettings() {
+  settingsReturnFocus = document.activeElement;
   settingsPopover.style.display = "block";
   settingsPopover.setAttribute("aria-hidden", "false");
   autoSyncToggle.checked = state.settings.autoSync;
@@ -51,11 +54,45 @@ settingsBtn.addEventListener("click", () => {
   lowVisionSelect.value = state.settings.lowVisionMode || "none";
   splitViewToggle.checked = Boolean(state.settings.splitView);
   githubRepoUrlInput.value = state.settings.githubRepoUrl || "";
-});
+  closeSettingsBtn.focus();
+}
 
-closeSettingsBtn.addEventListener("click", () => {
+function closeSettings() {
   settingsPopover.style.display = "none";
   settingsPopover.setAttribute("aria-hidden", "true");
+  if (settingsReturnFocus instanceof HTMLElement) {
+    settingsReturnFocus.focus();
+  }
+  settingsReturnFocus = null;
+}
+
+settingsBtn.addEventListener("click", openSettings);
+closeSettingsBtn.addEventListener("click", closeSettings);
+
+settingsPopover.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.stopPropagation();
+    closeSettings();
+    return;
+  }
+
+  if (e.key !== "Tab") return;
+
+  const focusable = settingsPopover.querySelectorAll(
+    'button, select, input, [tabindex]:not([tabindex="-1"])',
+  );
+  if (!focusable.length) return;
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 });
 
 exportBtn.addEventListener("click", () => {
@@ -119,7 +156,7 @@ standardSelect.addEventListener("change", (e) => {
     colors: state.colors,
     pairs: getCurrentAnalysisPairs(),
     preserveIssues: !getCurrentAnalysisPairs().length,
-  }).then(() => render());
+  }).then(() => refreshHistory()).then(() => render()).catch((err) => console.error("ChromaCheck: standard change analysis failed", err));
 });
 
 cvdSelect.addEventListener("change", (e) => {
@@ -131,7 +168,7 @@ cvdSelect.addEventListener("change", (e) => {
     colors: state.colors,
     pairs: getCurrentAnalysisPairs(),
     preserveIssues: !getCurrentAnalysisPairs().length,
-  }).then(() => render());
+  }).then(() => refreshHistory()).then(() => render()).catch((err) => console.error("ChromaCheck: CVD change analysis failed", err));
 });
 
 lowVisionSelect.addEventListener("change", (e) => {
@@ -418,7 +455,7 @@ chrome.runtime.onMessage.addListener((message) => {
     colors: state.colors,
     pairs: getCurrentAnalysisPairs(),
     preserveIssues: !getCurrentAnalysisPairs().length,
-  }).then(() => render());
+  }).then(() => refreshHistory()).then(() => render()).catch((err) => console.error("ChromaCheck: CVD sync analysis failed", err));
 });
 
 chrome.tabs.onActivated.addListener(() => {
