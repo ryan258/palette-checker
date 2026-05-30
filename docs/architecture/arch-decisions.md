@@ -9,7 +9,7 @@
 - **ETC**: One place to inspect, serialize, or replace. Renderers called explicitly after mutation
 
 ## ADR-3: innerHTML + Template Literals for Rendering
-- **Decision**: String templates → `innerHTML`. Only validated hex values interpolated (no XSS risk)
+- **Decision**: String templates → `innerHTML` for static markup and validated hex-only data. User-controlled URLs/status text use DOM APIs (`textContent`, `style.*`) instead of HTML parser contexts
 - **ETC**: Templates are readable, self-contained. Full re-parse mitigated by DocumentFragment batching
 
 ## ADR-4: Event Delegation Pattern
@@ -48,3 +48,8 @@
 ## ADR-10: Predefined Default Colors
 - **Decision**: `ADD_COLOR_DEFAULTS` array provides curated hex values; fallback to random if exhausted
 - **ETC rationale**: Changing defaults = edit one array. Defaults are visually distinct for contrast variety
+
+## ADR-11: Roadmap Tooling State and Browser Boundaries
+- **Decision**: Roadmap features add orthogonal display/export/preview state axes (`colorFormat`, image sampling fields, `exportMode`) while keeping palette colors canonical as validated `#rrggbb`
+- **Render contract**: Palette mutations can refresh several dependent views as one coordinated render cycle when each view derives from the same color source
+- **Boundary contract**: `try/catch` is limited to browser APIs and external payload parsing (`localStorage`, JSON, URL parsing, clipboard, canvas sampling)

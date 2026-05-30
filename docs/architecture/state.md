@@ -1,11 +1,16 @@
 # State Map & Orthogonality Rules
 
-## The Single State Object (`state` — global, script.js:11-21)
+## The Single State Object (`state` — global, script.js)
 ```javascript
 state = {
   colors: [{ id: string, hex: string }],     // user's palette (2-9 entries)
   activeFilters: { AAA: bool, AA: bool, "AA Large": bool, Fail: bool },
-  apcaInformationalOnly: boolean              // true = WCAG drives filtering
+  apcaInformationalOnly: boolean,             // true = WCAG drives filtering
+  colorFormat: "hex" | "rgb" | "hsl" | "oklch",
+  imageBackground: string,                    // validated http(s), data, or blob URL
+  imageSampleHex: string,                     // sampled #rrggbb or empty
+  imageSampleStatus: string,                  // plain status text
+  exportMode: "css" | "tailwind"
 }
 ```
 
@@ -15,17 +20,29 @@ state = {
 - `state.colors[n].hex` — lowercase `#rrggbb`. The ONLY mutable field on a color
 - `state.activeFilters` — all four keys always present. Initialized to `true`
 - `state.apcaInformationalOnly` — when `true`, WCAG levels drive card filtering; when `false`, APCA levels drive it
+- `state.colorFormat` — controls input/card display formatting only. Stored colors remain hex
+- `state.imageBackground` — restored through URL protocol validation before use
+- `state.imageSampleHex` — sampled average background, validated as hex before restore
+- `state.imageSampleStatus` — display-only text, normalized before restore and rendered with `textContent`
+- `state.exportMode` — controls the export text area format
 
 ## Orthogonality Rules (no side effects between axes)
 - **Colors axis** is independent of **Filters axis**: changing a color never changes filter state, and vice versa
 - **APCA toggle axis** is independent of both: flipping the mode changes how cards are classified but doesn't alter `colors` or `activeFilters`
-- Each state mutation triggers exactly ONE render path:
-  - `colors` changed → `renderColorInputs()` (which chains to `renderCombinations()`)
+- **Format axis** is display-only: changing it never rewrites `state.colors`
+- **Image sampling axis** is preview-only: changing it never rewrites palette colors
+- **Export axis** is output-only: changing it never rewrites palette colors or filters
+- Each state mutation triggers exactly ONE render cycle:
+  - structural `colors` changes → `renderColorInputs()` (which refreshes dependent views)
+  - single-color value changes → `updateColor()` refreshes contrast, preview, harmony, and export views as one coordinated palette cycle
   - `activeFilters` changed → `filterCombinations()` only
   - `apcaInformationalOnly` changed → `renderCombinations()` (reclassify all cards)
+  - `colorFormat` changed → `renderColorInputs()` (same palette, different presentation)
+  - `imageBackground` / `imageSampleHex` changed → `renderImagePreview()` only
+  - `exportMode` changed → `renderExportOutput()` only
 
 ## Mutation Rules
-- **Only state mutator functions may write to `state`**: `addColor`, `removeColor`, `updateColor`, filter toggle handler, APCA toggle handler
+- **Only state mutator functions may write to `state`**: `addColor`, `removeColor`, `updateColor`, `applyPalette`, `applyImageBackground`, and the specific filter/format/export event handlers
 - **Never mutate `state` inside**: renderers, calculators, event handlers (handlers call mutators)
 - **Never read DOM to derive state**: State is the source of truth. DOM reflects state, not the reverse
 - **Array mutations**: Use `push()` to add, `splice()` to remove. Never reassign `state.colors` entirely
@@ -35,6 +52,7 @@ state = {
 - Contrast ratios, WCAG levels, APCA Lc scores → computed by `getCombinationData()`
 - Color pairs grid → computed by `getColorPairs()`
 - Filter mode label → computed by `getFilterModeLabel()`
+- HSL, RGB, and OKLCH display strings → computed from validated hex
 - Visible card count → computed by `filterCombinations()`
 - **Rule**: Never cache derived data in `state`. Always recompute from source
 
@@ -45,6 +63,5 @@ state = {
 - `lastFocusedElement` — module-level variable for focus restoration (not in `state`)
 
 ## Future State Extensions
-- If adding persistence (localStorage), serialize/deserialize `state` as a whole
 - If adding undo, snapshot `state.colors` before mutation
 - New state axes MUST be orthogonal: adding a property must not require changes to unrelated render paths

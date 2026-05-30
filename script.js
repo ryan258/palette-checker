@@ -14,6 +14,8 @@ const EXPORT_MODES = {
   tailwind: "tailwind",
 };
 const DEFAULT_COLORS = ["#0f172a", "#f8fafc", "#3b82f6"];
+const IMAGE_STATUS_MAX_LENGTH = 180;
+const SUPPORTED_IMAGE_PROTOCOLS = ["http:", "https:", "data:", "blob:"];
 const TYPOGRAPHY_SAMPLES = [
   { label: "Body", fontSize: "14px", fontWeight: 400 },
   { label: "Readable", fontSize: "16px", fontWeight: 400 },
@@ -496,8 +498,19 @@ function escapeAttribute(value) {
   return escapeHtml(value).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-function cssUrl(value) {
-  return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+function normalizeImageUrl(value) {
+  if (typeof value !== "string" || !value.trim()) return "";
+  try {
+    const url = new URL(value.trim(), window.location.href);
+    return SUPPORTED_IMAGE_PROTOCOLS.includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeImageStatus(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\s+/g, " ").trim().slice(0, IMAGE_STATUS_MAX_LENGTH);
 }
 
 function getLevelRank(level) {
@@ -640,6 +653,7 @@ function serializeState() {
     imageBackground: state.imageBackground,
     imageSampleHex: state.imageSampleHex,
     imageSampleStatus: state.imageSampleStatus,
+    exportMode: state.exportMode,
   };
 }
 
@@ -661,6 +675,10 @@ function loadPersistedState() {
     localStorage.removeItem(STORAGE_KEY);
     return;
   }
+  if (!saved || typeof saved !== "object") {
+    localStorage.removeItem(STORAGE_KEY);
+    return;
+  }
   const palette = normalizePaletteValues(saved.colors);
   if (palette) {
     state.colors.splice(
@@ -678,10 +696,12 @@ function loadPersistedState() {
     state.colorFormat = saved.colorFormat;
   }
   state.apcaInformationalOnly = saved.apcaInformationalOnly !== false;
-  state.imageBackground = typeof saved.imageBackground === "string" ? saved.imageBackground : "";
+  state.imageBackground = normalizeImageUrl(saved.imageBackground || "");
   state.imageSampleHex = parseHexInput(saved.imageSampleHex || "") || "";
-  state.imageSampleStatus =
-    typeof saved.imageSampleStatus === "string" ? saved.imageSampleStatus : "";
+  state.imageSampleStatus = normalizeImageStatus(saved.imageSampleStatus);
+  if (Object.values(EXPORT_MODES).includes(saved.exportMode)) {
+    state.exportMode = saved.exportMode;
+  }
 }
 
 function loadSharedPalette() {
@@ -1194,23 +1214,45 @@ function renderImagePreview() {
   const sampledBg = state.imageSampleHex || state.colors[1]?.hex || "#0f172a";
   const ratio = getContrastRatio(textHex, sampledBg);
   const apca = calcAPCA(textHex, sampledBg);
-  const backgroundStyle = state.imageBackground
-    ? `background-image: linear-gradient(rgba(0,0,0,0.12), rgba(0,0,0,0.12)), url("${cssUrl(state.imageBackground)}");`
-    : `background:${sampledBg};`;
+  const imageUrl = normalizeImageUrl(state.imageBackground);
 
-  imagePreview.innerHTML = `
-    <div class="image-preview-surface" style="${backgroundStyle}">
-      <div class="image-preview-copy" style="color:${textHex};">
-        <span>Image contrast</span>
-        <strong>Text over sampled background</strong>
-        <small>${formatContrastRatio(ratio)} ${getComplianceLevel(ratio)} | ${formatAPCAScore(apca)} ${getAPCAComplianceLevel(apca)}</small>
-      </div>
-    </div>
-    <div class="image-sample-meta">
-      <span>Sample: ${state.imageSampleHex || "none"}</span>
-      <span>${state.imageSampleStatus || "Load an image to sample its average background."}</span>
-    </div>
-  `;
+  const surface = document.createElement("div");
+  surface.className = "image-preview-surface";
+  surface.style.backgroundColor = sampledBg;
+  if (imageUrl) {
+    surface.style.backgroundImage =
+      `linear-gradient(rgba(0,0,0,0.12), rgba(0,0,0,0.12)), url(${JSON.stringify(imageUrl)})`;
+  }
+
+  const copy = document.createElement("div");
+  copy.className = "image-preview-copy";
+  copy.style.color = textHex;
+
+  const eyebrow = document.createElement("span");
+  eyebrow.textContent = "Image contrast";
+
+  const heading = document.createElement("strong");
+  heading.textContent = "Text over sampled background";
+
+  const metrics = document.createElement("small");
+  metrics.textContent =
+    `${formatContrastRatio(ratio)} ${getComplianceLevel(ratio)} | ${formatAPCAScore(apca)} ${getAPCAComplianceLevel(apca)}`;
+
+  copy.append(eyebrow, heading, metrics);
+  surface.appendChild(copy);
+
+  const meta = document.createElement("div");
+  meta.className = "image-sample-meta";
+
+  const sample = document.createElement("span");
+  sample.textContent = `Sample: ${state.imageSampleHex || "none"}`;
+
+  const status = document.createElement("span");
+  status.textContent =
+    state.imageSampleStatus || "Load an image to sample its average background.";
+
+  meta.append(sample, status);
+  imagePreview.replaceChildren(surface, meta);
 }
 
 function sampleImage(url) {
@@ -1253,8 +1295,8 @@ function sampleImage(url) {
   });
 }
 
-async function applyImageBackground(url) {
-  if (!url) {
+async function applyImageBackground(value) {
+  if (!value) {
     state.imageBackground = "";
     state.imageSampleHex = "";
     state.imageSampleStatus = "";
@@ -1263,13 +1305,19 @@ async function applyImageBackground(url) {
     return;
   }
 
-  state.imageBackground = url;
+  const imageUrl = normalizeImageUrl(value);
+  if (!imageUrl) {
+    setStatus("Image URL is not valid or supported.", "error");
+    return;
+  }
+
+  state.imageBackground = imageUrl;
   state.imageSampleStatus = "Sampling image...";
   renderImagePreview();
-  const sample = await sampleImage(url);
-  if (state.imageBackground !== url) return;
+  const sample = await sampleImage(imageUrl);
+  if (state.imageBackground !== imageUrl) return;
   state.imageSampleHex = sample.hex;
-  state.imageSampleStatus = sample.status;
+  state.imageSampleStatus = normalizeImageStatus(sample.status);
   saveState();
   renderImagePreview();
 }
@@ -1568,20 +1616,14 @@ function bindEvents() {
   });
 
   applyImageUrlBtn.addEventListener("click", () => {
-    const value = imageUrlInput.value.trim();
-    if (!value) return;
-    let url;
-    try {
-      url = new URL(value, window.location.href);
-    } catch {
-      setStatus("Image URL is not valid.", "error");
+    const rawImageUrl = imageUrlInput.value.trim();
+    if (!rawImageUrl) return;
+    const imageUrl = normalizeImageUrl(rawImageUrl);
+    if (!imageUrl) {
+      setStatus("Image URL is not valid or supported.", "error");
       return;
     }
-    if (!["http:", "https:", "data:", "blob:"].includes(url.protocol)) {
-      setStatus("Image URL protocol is not supported.", "error");
-      return;
-    }
-    void applyImageBackground(url.href);
+    void applyImageBackground(imageUrl);
   });
 
   imageUploadBtn.addEventListener("click", () => {

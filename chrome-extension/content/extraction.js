@@ -82,6 +82,7 @@ export let tokenCache = null;
 export function buildTokenMap() {
   if (tokenCache) return tokenCache;
   tokenCache = new Map();
+  const probes = [];
   try {
     [...document.styleSheets].forEach((sheet) => {
       try {
@@ -92,22 +93,9 @@ export function buildTokenMap() {
               if (prop.startsWith("--")) {
                 const value = rule.style.getPropertyValue(prop).trim();
                 const dummy = document.createElement("div");
-                dummy.id = "chromacheck-token-probe";
                 dummy.style.backgroundColor = value;
                 if (dummy.style.backgroundColor) {
-                  document.body.appendChild(dummy);
-                  const computedStr =
-                    window.getComputedStyle(dummy).backgroundColor;
-                  const hex = rgbToHex(computedStr);
-                  if (hex) {
-                    if (
-                      !tokenCache.has(hex) ||
-                      tokenCache.get(hex).length > prop.length
-                    ) {
-                      tokenCache.set(hex.toLowerCase(), prop);
-                    }
-                  }
-                  document.body.removeChild(dummy);
+                  probes.push({ prop, dummy });
                 }
               }
             }
@@ -117,6 +105,33 @@ export function buildTokenMap() {
         // Ignore cross-origin stylesheet errors
       }
     });
+
+    // Batch all probes into one container so a single insertion triggers at
+    // most one layout flush, then read every computed style without further
+    // DOM writes between reads (avoids per-token forced reflows).
+    if (probes.length) {
+      const container = document.createElement("div");
+      container.id = "chromacheck-token-probe";
+      container.style.cssText =
+        "position:absolute;visibility:hidden;pointer-events:none;width:0;height:0;overflow:hidden;";
+      for (const { dummy } of probes) container.appendChild(dummy);
+      document.body.appendChild(container);
+
+      for (const { prop, dummy } of probes) {
+        const computedStr = window.getComputedStyle(dummy).backgroundColor;
+        const hex = rgbToHex(computedStr);
+        if (hex) {
+          if (
+            !tokenCache.has(hex) ||
+            tokenCache.get(hex).length > prop.length
+          ) {
+            tokenCache.set(hex.toLowerCase(), prop);
+          }
+        }
+      }
+
+      document.body.removeChild(container);
+    }
   } catch (e) {}
   return tokenCache;
 }

@@ -13,7 +13,7 @@
 - **Font**: Plus Jakarta Sans via Google Fonts CDN (external dependency)
 
 ## Dependency Policy
-- **Hard rule: zero npm dependencies.** No `package.json` exists. Do not create one
+- **Hard rule for the root static app: zero npm dependencies.** Do not create a root `package.json`
 - **No frameworks.** No React, Vue, Svelte, or any DOM abstraction layer
 - **No utility libraries.** No lodash, chroma-js, or color manipulation libs
 - **Browser APIs only**: `crypto.randomUUID()` with `Math.random()` fallback
@@ -23,11 +23,12 @@
 - Features required: CSS custom properties, `backdrop-filter`, `crypto.randomUUID`, template literals
 - No IE11 support. No polyfills
 
-## File Inventory (exhaustive)
-- `index.html` — markup, SVG filter definitions, structure (~312 lines)
-- `script.js` — all application logic (~688 lines)
-- `styles.css` — all styling (~886 lines)
+## Root Static App File Inventory (exhaustive)
+- `index.html` — markup, SVG filter definitions, structure (~455 lines)
+- `script.js` — all application logic (~1,600 lines)
+- `styles.css` — all styling (~1,100 lines)
 - `README.md`, `CHANGELOG.md`, `ROADMAP.md` — documentation only
+- Sibling subprojects such as `cli/`, `chrome-extension/`, and `figma-plugin/` have their own manifests and are outside this root static-app constraint
 
 ## Performance Boundaries
 - **MAX_COLORS = 9** → max 72 contrast pairs (n² - n). DOM stays small

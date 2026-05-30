@@ -153,17 +153,41 @@
         return "Fail";
       }
 
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (char) => {
+          return {
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#39;",
+          }[char];
+        });
+      }
+
+      function normalizeHex(value) {
+        return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)
+          ? value.toLowerCase()
+          : null;
+      }
+
       function render(colors) {
-        summary.textContent = colors.length
-          ? `${colors.length} solid colors`
+        const normalizedColors = (Array.isArray(colors) ? colors : [])
+          .map(normalizeHex)
+          .filter(Boolean);
+        summary.textContent = normalizedColors.length
+          ? `${normalizedColors.length} solid colors`
           : "No solid colors in the selection";
-        swatches.innerHTML = colors
-          .map((hex) => `<div class="swatch" title="${hex}" style="background:${hex}"></div>`)
+        swatches.innerHTML = normalizedColors
+          .map(
+            (hex) =>
+              `<div class="swatch" title="${escapeHtml(hex)}" style="background:${hex}"></div>`,
+          )
           .join("");
 
         const rows = [];
-        colors.forEach((fg) => {
-          colors.forEach((bg) => {
+        normalizedColors.forEach((fg) => {
+          normalizedColors.forEach((bg) => {
             if (fg === bg) return;
             const ratio = contrast(fg, bg);
             const grade = level(ratio);
@@ -178,10 +202,10 @@
               <article class="result">
                 <div class="sample" style="color:${row.fg};background:${row.bg};">Aa</div>
                 <div>
-                  <strong>${row.fg} on ${row.bg}</strong>
+                  <strong>${escapeHtml(row.fg)} on ${escapeHtml(row.bg)}</strong>
                   <div class="meta">${row.ratio.toFixed(2)}:1</div>
                 </div>
-                <span class="badge ${row.grade === "Fail" ? "fail" : "pass"}">${row.grade}</span>
+                <span class="badge ${row.grade === "Fail" ? "fail" : "pass"}">${escapeHtml(row.grade)}</span>
               </article>
             `,
           )

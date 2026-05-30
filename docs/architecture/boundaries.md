@@ -23,13 +23,16 @@
 ## Layer 3: State Mutators (write to `state`, then call renderers)
 - `addColor()` — pushes to `state.colors`, calls `renderColorInputs()`
 - `removeColor(id)` — splices from `state.colors`, calls `renderColorInputs()`
-- `updateColor(id, hex)` — updates `color.hex`, calls `renderCombinations()`
+- `updateColor(id, hex)` — updates `color.hex`, refreshes all color-derived views
+- `applyPalette(hexValues)` — normalizes imported/shared values before replacing `state.colors`
+- `applyImageBackground(url)` — validates image URLs and updates preview-only image state
 - Filter toggles — flip `state.activeFilters[key]`, call `filterCombinations()`
-- **Contract**: Mutate state THEN trigger exactly one render cycle. Never render without state change
+- **Contract**: Mutate state THEN trigger exactly one coordinated render cycle. Never render without state change
 
 ## Layer 4: Renderers (read state, write DOM — never mutate state)
 - `renderColorInputs()` — rebuilds color input section + calls `renderCombinations()`
 - `renderCombinations()` — rebuilds contrast card grid + calls `filterCombinations()`
+- `renderDesignPreview()` / `renderImagePreview()` / `renderExportOutput()` — render derived roadmap panels
 - `createCombinationCard(data)` — returns a DOM element. No side effects
 - `filterCombinations()` — toggles `.hidden` class on existing cards
 - `renderEmptyState()` / clear empty state — manages the no-results message
