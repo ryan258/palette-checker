@@ -90,6 +90,32 @@
           <div class="color-inputs" id="color-inputs">
             <!-- Color inputs will be injected here by JS -->
           </div>
+          <div class="tool-grid" aria-label="Palette tools">
+            <label class="tool-field" for="color-format-select">
+              <span>Format</span>
+              <select id="color-format-select" class="custom-select">
+                <option value="hex">HEX</option>
+                <option value="rgb">RGB</option>
+                <option value="hsl">HSL</option>
+                <option value="oklch">OKLCH</option>
+              </select>
+            </label>
+            <label class="tool-field" for="harmony-base-select">
+              <span>Base</span>
+              <select id="harmony-base-select" class="custom-select"></select>
+            </label>
+            <label class="tool-field" for="harmony-mode-select">
+              <span>Harmony</span>
+              <select id="harmony-mode-select" class="custom-select">
+                <option value="analogous">Analogous</option>
+                <option value="complementary">Complementary</option>
+                <option value="triadic">Triadic</option>
+              </select>
+            </label>
+            <button type="button" id="generate-harmony-btn" class="btn btn-secondary">
+              Generate
+            </button>
+          </div>
           <div class="actions">
             <button
               type="button"
@@ -133,10 +159,87 @@
               </svg>
               Add Color
             </button>
+            <button type="button" id="export-json-btn" class="btn btn-secondary">
+              Export JSON
+            </button>
+            <button type="button" id="import-palette-btn" class="btn btn-secondary">
+              Import JSON
+            </button>
+            <input
+              type="file"
+              id="palette-import-file"
+              class="sr-only"
+              accept="application/json,.json"
+            />
+            <button type="button" id="copy-share-url-btn" class="btn btn-secondary">
+              Copy URL
+            </button>
+            <button type="button" id="copy-matrix-btn" class="btn btn-secondary">
+              Copy Matrix
+            </button>
             <span id="color-count-indicator" class="count-indicator"
               >3/9 Colors</span
             >
           </div>
+          <div
+            id="status-message"
+            class="status-message"
+            role="status"
+            aria-live="polite"
+          ></div>
+        </section>
+
+        <section class="exports glass-panel">
+          <div class="section-heading">
+            <h2>Code Export</h2>
+            <div class="inline-actions">
+              <button type="button" id="copy-css-btn" class="btn btn-secondary">
+                Copy CSS
+              </button>
+              <button type="button" id="copy-tailwind-btn" class="btn btn-secondary">
+                Copy Tailwind
+              </button>
+            </div>
+          </div>
+          <textarea
+            id="export-output"
+            class="export-output"
+            readonly
+            aria-label="Generated CSS variables"
+          ></textarea>
+        </section>
+
+        <section class="preview-lab glass-panel">
+          <div class="section-heading">
+            <h2>Preview Lab</h2>
+            <div class="image-tools">
+              <label class="sr-only" for="image-url-input">Image URL</label>
+              <input
+                type="url"
+                id="image-url-input"
+                class="image-url-input"
+                placeholder="https://example.com/image.jpg"
+              />
+              <button type="button" id="apply-image-url-btn" class="btn btn-secondary">
+                Load Image
+              </button>
+              <button type="button" id="image-upload-btn" class="btn btn-secondary">
+                Upload Image
+              </button>
+              <input
+                type="file"
+                id="image-upload-input"
+                class="sr-only"
+                accept="image/*"
+              />
+              <button type="button" id="clear-image-btn" class="btn btn-secondary">
+                Clear
+              </button>
+            </div>
+          </div>
+          <div id="theme-preview" class="theme-preview-grid"></div>
+          <div id="typography-preview" class="typography-preview-grid"></div>
+          <div id="image-preview" class="image-preview"></div>
         </section>
 
         <section class="results">
