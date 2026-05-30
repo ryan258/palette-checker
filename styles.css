@@ -2,12 +2,18 @@
   --bg-color: #0f172a;
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
+  --text-muted-strong: #cbd5e1;
+  --control-border: #64748b;
   --glass-bg: rgba(30, 41, 59, 0.7);
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
+  --accent: #60a5fa;
+  --accent-hover: #93c5fd;
+  --accent-solid: #2563eb;
+  --accent-solid-hover: #1d4ed8;
+  --accent-solid-shadow: rgba(37, 99, 235, 0.3);
+  --accent-solid-shadow-hover: rgba(37, 99, 235, 0.4);
 
   --success-bg: rgba(16, 185, 129, 0.2);
   --success-text: #34d399;
@@ -237,7 +243,7 @@ header p {
 .hex-input {
   width: 100%;
   background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--control-border);
   color: var(--text-primary);
   padding: 0.5rem;
   border-radius: var(--radius-sm);
@@ -312,15 +318,15 @@ header p {
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: var(--accent-solid);
   color: white;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px var(--accent-solid-shadow);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--accent-solid-hover);
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 6px 16px var(--accent-solid-shadow-hover);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -432,8 +438,8 @@ header p {
 }
 
 .apca-mode-toggle input {
-  width: 1rem;
-  height: 1rem;
+  width: 1.5rem;
+  height: 1.5rem;
   accent-color: var(--accent);
 }
 
@@ -539,7 +545,8 @@ header p {
 }
 
 .combo-swap {
-  opacity: 0.5;
+  color: var(--text-muted-strong);
+  opacity: 1;
 }
 
 .scores-container {
@@ -624,7 +631,8 @@ footer {
 
 footer a {
   color: var(--accent);
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
   transition: var(--transition-fast);
 }
 
@@ -738,7 +746,7 @@ footer a:hover {
 .btn-secondary {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--control-border);
 }
 
 .btn-secondary:hover {

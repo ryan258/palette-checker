@@ -156,7 +156,8 @@ export function getIssueFixOptions(issue) {
   if (
     !issue ||
     issue.type === "target-size" ||
-    issue.type === "link-contrast"
+    issue.type === "link-contrast" ||
+    issue.focusProblem === "missing"
   ) {
     return null;
   }
@@ -411,4 +412,9 @@ export function escapeHtml(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
+}
+export function escapeAttribute(str) {
+  return escapeHtml(str)
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

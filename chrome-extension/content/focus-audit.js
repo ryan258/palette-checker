@@ -16,6 +16,7 @@ export function captureFocusStyles(el) {
     outlineStyle: style.outlineStyle,
     borderColor: style.borderTopColor,
     borderWidth: parseFloat(style.borderTopWidth) || 0,
+    borderStyle: style.borderTopStyle,
     boxShadow: style.boxShadow,
   };
 }
@@ -23,7 +24,9 @@ export function getFocusIndicator(before, after) {
   if (
     after.outlineWidth > 0 &&
     after.outlineStyle !== "none" &&
-    after.outlineColor !== before.outlineColor &&
+    (after.outlineColor !== before.outlineColor ||
+      after.outlineWidth !== before.outlineWidth ||
+      after.outlineStyle !== before.outlineStyle) &&
     !isTransparent(after.outlineColor)
   ) {
     return { color: after.outlineColor, property: "outline-color" };
@@ -40,7 +43,10 @@ export function getFocusIndicator(before, after) {
 
   if (
     after.borderWidth > 0 &&
-    after.borderColor !== before.borderColor &&
+    after.borderStyle !== "none" &&
+    (after.borderColor !== before.borderColor ||
+      after.borderWidth !== before.borderWidth ||
+      after.borderStyle !== before.borderStyle) &&
     !isTransparent(after.borderColor)
   ) {
     return { color: after.borderColor, property: "border-color" };
@@ -93,7 +99,26 @@ export async function auditFocusIndicators() {
     if (document.activeElement !== el) continue;
     const after = captureFocusStyles(el);
     const indicator = getFocusIndicator(before, after);
-    if (!indicator) continue;
+    if (!indicator) {
+      const id =
+        el.getAttribute(TRACKED_ID_ATTR) || `focus-${String(index)}`;
+      trackElement(id, el);
+
+      pairs.push({
+        id,
+        textColor: "#ff0000",
+        bgColor: "#ff0000",
+        foregroundProperty: "outline-color",
+        selector,
+        textPreview: "Missing visible focus indicator",
+        tagName: el.tagName.toLowerCase(),
+        fontSize: "24px",
+        fontWeight: "400",
+        type: "focus-indicator",
+        focusProblem: "missing",
+      });
+      continue;
+    }
 
     const indicatorRgba = parseRGBA(indicator.color);
     if (!indicatorRgba || indicatorRgba.a === 0) continue;

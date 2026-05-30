@@ -21,6 +21,7 @@ export function summarizeIssuesForStorage(issues) {
     bgColor: issue.bgColor,
     textColorToken: issue.textColorToken,
     bgColorToken: issue.bgColorToken,
+    focusProblem: issue.focusProblem,
   }));
 }
 export function summarizeIssueList(issues, settings = state.settings) {

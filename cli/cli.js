@@ -5,6 +5,7 @@ const { program } = require("commander");
 const chalk = require("chalk");
 const fs = require("fs");
 const path = require("path");
+const { getLevelRank } = require("../chrome-extension/shared/contrast.js");
 
 program
   .name("chromacheck")
@@ -29,6 +30,20 @@ const targetUrl = program.args[0];
 
 // Format standard
 const activeStandard = options.standard.toUpperCase();
+
+function getRequiredAPCALevel(threshold) {
+  switch (String(threshold || "").toUpperCase()) {
+    case "AAA":
+      return "AAA";
+    case "BRONZE":
+    case "AA LARGE":
+      return "AA Large";
+    case "SILVER":
+    case "AA":
+    default:
+      return "AA";
+  }
+}
 
 async function runAudit() {
   let browser;
@@ -137,12 +152,8 @@ async function runAudit() {
       if (issue.type === "target-size") return true; // Always a fail if it was extracted
 
       if (activeStandard === "APCA") {
-        const score = Math.abs(issue.apcaScore);
-        if (options.threshold.toUpperCase() === "SILVER")
-          return issue.apcaLevel !== "Silver" && issue.apcaLevel !== "Gold";
-        if (options.threshold.toUpperCase() === "BRONZE")
-          return issue.apcaLevel === "Fail";
-        return issue.apcaLevel === "Fail";
+        const requiredLevel = getRequiredAPCALevel(options.threshold);
+        return getLevelRank(issue.apcaLevel) < getLevelRank(requiredLevel);
       } else {
         if (options.threshold.toUpperCase() === "AAA")
           return issue.wcagLevel !== "AAA";

@@ -135,6 +135,7 @@ export function nextFrame() {
 }
 export function ensureCvdToolbar() {
   if (!document.body) return;
+  bindSimulationShortcut();
 
   if (!cvdToolbarStyle) {
     cvdToolbarStyle = document.createElement("style");
@@ -460,9 +461,6 @@ export function ensureSplitView() {
   syncSplitLayout();
 }
 export function applyVisionPresentation(shouldBroadcast = false) {
-  ensureCvdToolbar();
-  syncCvdToolbar();
-
   const hasSimulation =
     (visionState.cvdMode && visionState.cvdMode !== "none") ||
     (visionState.lowVisionMode && visionState.lowVisionMode !== "none");
@@ -473,7 +471,10 @@ export function applyVisionPresentation(shouldBroadcast = false) {
   if (!hasSimulation) {
     document.documentElement.style.filter = "";
     destroySplitView();
+    destroyCvdToolbar();
   } else if (visionState.splitView) {
+    ensureCvdToolbar();
+    syncCvdToolbar();
     document.documentElement.style.filter = "";
     ensureSplitView();
     splitIframe.style.filter = combinedFilter;
@@ -484,6 +485,8 @@ export function applyVisionPresentation(shouldBroadcast = false) {
     syncSplitLayout();
     syncSplitScroll();
   } else {
+    ensureCvdToolbar();
+    syncCvdToolbar();
     destroySplitView();
     document.documentElement.style.filter = combinedFilter;
     if (visionState.lowVisionMode === "field-loss") {
@@ -536,9 +539,22 @@ export function bindSimulationShortcut() {
   document.addEventListener("keydown", handleSimulationShortcut, true);
   cvdShortcutBound = true;
 }
+export function unbindSimulationShortcut() {
+  if (!cvdShortcutBound) return;
+  document.removeEventListener("keydown", handleSimulationShortcut, true);
+  cvdShortcutBound = false;
+}
+export function destroyCvdToolbar() {
+  cvdToolbar?.remove();
+  cvdPip?.remove();
+  cvdToolbarStyle?.remove();
+  cvdToolbar = null;
+  cvdPip = null;
+  cvdToolbarStyle = null;
+  unbindSimulationShortcut();
+}
 export function initColorBlindnessFilters() {
   if (document.getElementById("chromacheck-color-blind-filters")) {
-    bindSimulationShortcut();
     return;
   }
 
@@ -576,5 +592,4 @@ export function initColorBlindnessFilters() {
   const div = document.createElement("div");
   div.innerHTML = svgStr;
   document.body.appendChild(div.firstElementChild);
-  bindSimulationShortcut();
 }

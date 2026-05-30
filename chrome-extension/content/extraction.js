@@ -129,6 +129,19 @@ export function getDirectText(el) {
   }
   return text.trim();
 }
+export function isInlineTextTarget(el, style) {
+  if (el.tagName.toLowerCase() !== "a") return false;
+  if (style.display !== "inline") return false;
+
+  const text = getDirectText(el) || el.textContent?.trim() || "";
+  if (!text) return false;
+
+  return Boolean(
+    el.closest(
+      "p, li, blockquote, dd, dt, figcaption, caption, th, td, label",
+    ),
+  );
+}
 export function extractElementPairs() {
   clearTrackedAttributes();
   tokenCache = null;
@@ -365,6 +378,9 @@ export function extractElementPairs() {
     if (!isContentVisible(el)) return;
 
     const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    if (isInlineTextTarget(el, style)) return;
+
     if (
       rect.width > 0 &&
       rect.height > 0 &&
@@ -372,8 +388,6 @@ export function extractElementPairs() {
     ) {
       const id = el.getAttribute(TRACKED_ID_ATTR) || String(idCounter++);
       trackElement(id, el);
-
-      const style = window.getComputedStyle(el);
 
       pairs.push({
         id,

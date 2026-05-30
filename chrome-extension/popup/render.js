@@ -3,7 +3,7 @@ import { EXTRACT_LABEL, EXTRACT_LOADING_LABEL, EMPTY_STATE_DEFAULT, EMPTY_STATE_
 import { state } from './state.js';
 import { extractBtn, focusAuditBtn, themeAuditBtn, pickerBtn, pageTitle, pageUrl, pageDomain, scanStatus, statusBanner, metricColors, metricColorsDetail, metricPairs, metricPairsDetail, metricFails, metricFailsDetail, metricPass, metricPassDetail, paletteSection, paletteSwatches, colorCount, pickedSection, pickedResult, resultsSection, resultsCount, combinationsGrid, issuesSection, issuesList, issuesCount, batchCount, batchCopyBtn, batchClearBtn, diffSection, diffSummary, diffMeta, themeSection, themeSummary, themeList, themeCount, domainSection, domainSummary, domainList, domainCount, emptyState, historySection, historyList, historyCount, pinnedSection, pinnedList, pinnedCount } from './dom-elements.js';
 import { readAnalysisMap, savePinnedItems } from './storage.js';
-import { deriveDomain, formatPageUrl, formatScanTimestamp, getStatusBadgeClass, getScoreTone, getIssueStableKey, getIssueGroupTitle, normalizeSavedScan, getIssueExplanation, getPinnedStatusAlert, getIssuePreviewGlyph, buildIssueGroups, escapeHtml } from './utils.js';
+import { deriveDomain, formatPageUrl, formatScanTimestamp, getStatusBadgeClass, getScoreTone, getIssueStableKey, getIssueGroupTitle, normalizeSavedScan, getIssueExplanation, getPinnedStatusAlert, getIssuePreviewGlyph, buildIssueGroups, escapeHtml, escapeAttribute } from './utils.js';
 import { summarizeIssueList, computeScanDiff, computeDomainComparison } from './analysis.js';
 
 export function setAuditLoading(button, isLoading, label, loadingLabel) {
@@ -672,7 +672,7 @@ export function buildIssueGroupElement(group) {
         <button
           type="button"
           class="btn-xs btn-select-issue btn-select-group ${isSelected ? "active" : ""} ${isPartiallySelected ? "partial" : ""}"
-          data-group-key="${escapeHtml(group.key)}"
+          data-group-key="${escapeAttribute(group.key)}"
           ${group.selectableKeys.length ? "" : "disabled"}
         >
           ${queueLabel}
@@ -689,7 +689,7 @@ export function buildIssueGroupElement(group) {
         <button
           type="button"
           class="btn-xs btn-toggle-issue-group"
-          data-group-key="${escapeHtml(group.key)}"
+          data-group-key="${escapeAttribute(group.key)}"
           aria-expanded="${group.isExpanded ? "true" : "false"}"
         >
           ${toggleLabel}
@@ -718,8 +718,8 @@ export function buildIssueGroupElement(group) {
               <div class="fix-meta">${option.selectorCount} selectors · ${formatContrastRatio(option.beforeRatio)} -> ${formatContrastRatio(option.afterRatio)}</div>
             </div>
             <div class="fix-actions">
-              <button type="button" class="btn-xs btn-preview-fix" data-id="" data-selector="${escapeHtml(option.selectors.join(", "))}" data-prop="${escapeHtml(option.property)}" data-val="${option.suggestion}">Preview</button>
-              <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeHtml(option.rule)}">Copy CSS</button>
+              <button type="button" class="btn-xs btn-preview-fix" data-id="" data-selector="${escapeAttribute(option.selectors.join(", "))}" data-prop="${escapeAttribute(option.property)}" data-val="${escapeAttribute(option.suggestion)}">Preview</button>
+              <button type="button" class="btn-xs btn-copy-fix" data-rule="${escapeAttribute(option.rule)}">Copy CSS</button>
             </div>
           </div>
         `;
@@ -756,7 +756,7 @@ export function buildIssueGroupElement(group) {
               const safeBase = parsed.href.replace(/\/$/, "");
               return `
         <div style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 8px; display: flex; justify-content: flex-end;">
-          <a href="${escapeHtml(safeBase)}/issues/new?title=${encodeURIComponent(
+          <a href="${escapeAttribute(safeBase)}/issues/new?title=${encodeURIComponent(
                 `[a11y] ${groupTitle} affecting ${group.count} selectors`,
               )}&body=${encodeURIComponent(
                 `**WCAG Score:** ${formatContrastRatio(issue.wcagRatio)} (${issue.wcagLevel})\n**APCA Score:** ${formatAPCAScore(issue.apcaScore)} (${issue.apcaLevel})\n**Representative Selector:** \`${issue.selector}\`\n**Affected Selectors:** ${group.count}\n\n${affectedSelectorLines}${group.count > 10 ? `\n- ...and ${group.count - 10} more` : ""}\n\n**Current Value:**\n- Text: \`${issue.textColor}\`\n- Background: \`${issue.bgColor}\`\n\n**Suggested Fixes:**\n${githubFixLines}\n\n**Impact:** ${getIssueExplanation(issue)}`,
@@ -813,7 +813,7 @@ export function buildIssueGroupElement(group) {
                   ${variant.issues
                     .map(
                       (member) => `
-                        <button type="button" class="issue-example" data-issue-id="${member.id}">
+                        <button type="button" class="issue-example" data-issue-id="${escapeAttribute(member.id)}">
                           <div class="issue-example-main">
                             <code class="issue-selector">${escapeHtml(member.selector)}</code>
                             <span class="issue-example-preview">${escapeHtml(member.textPreview || member.tagName)}</span>
@@ -831,7 +831,7 @@ export function buildIssueGroupElement(group) {
       : group.issues
           .map(
             (member) => `
-              <button type="button" class="issue-example" data-issue-id="${member.id}">
+              <button type="button" class="issue-example" data-issue-id="${escapeAttribute(member.id)}">
                 <div class="issue-example-main">
                   <code class="issue-selector">${escapeHtml(member.selector)}</code>
                   <span class="issue-example-preview">${escapeHtml(member.textPreview || member.tagName)}</span>
@@ -872,8 +872,10 @@ export function renderIssues() {
 
   syncSelectedIssueKeys();
   const issueGroups = buildIssueGroups(state.issues);
+  const levelKey =
+    state.settings.standard === "APCA" ? "apcaLevel" : "wcagLevel";
   const visibleIssueGroups = issueGroups.filter(
-    (group) => state.issueFilters[group.representative?.wcagLevel] !== false,
+    (group) => state.issueFilters[group.representative?.[levelKey]] !== false,
   );
   syncExpandedIssueGroupKeys(issueGroups);
   issuesSection.style.display = "";
@@ -896,7 +898,10 @@ export function renderIssues() {
   if (!visibleIssueGroups.length) {
     const empty = document.createElement("div");
     empty.className = "no-results";
-    empty.textContent = "No page issues match the active WCAG filters.";
+    empty.textContent =
+      state.settings.standard === "APCA"
+        ? "No page issues match the active APCA filters."
+        : "No page issues match the active WCAG filters.";
     fragment.appendChild(empty);
     issuesList.appendChild(fragment);
     updateEmptyStateVisibility();
@@ -941,7 +946,10 @@ export function filterCombinations() {
   let visibleCount = 0;
 
   rows.forEach((row) => {
-    const level = row.dataset.wcagLevel;
+    const level =
+      state.settings.standard === "APCA"
+        ? row.dataset.apcaLevel
+        : row.dataset.wcagLevel;
     const show = state.activeFilters[level];
     row.classList.toggle("hidden", !show);
     if (show) visibleCount += 1;
@@ -953,7 +961,10 @@ export function filterCombinations() {
   if (visibleCount === 0 && rows.length > 0) {
     const empty = document.createElement("div");
     empty.className = "no-results";
-    empty.textContent = "No combinations match the active WCAG filters.";
+    empty.textContent =
+      state.settings.standard === "APCA"
+        ? "No combinations match the active APCA filters."
+        : "No combinations match the active WCAG filters.";
     combinationsGrid.appendChild(empty);
   }
 

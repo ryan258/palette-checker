@@ -243,7 +243,7 @@ function createCombinationCard(data) {
   card.dataset.apcaLevel = data.apcaLevel;
 
   card.innerHTML = `
-    <div class="combo-preview" style="background-color: ${data.pair.bg.hex}; color: ${data.pair.text.hex};">
+    <div class="combo-preview" aria-hidden="true" style="background-color: ${data.pair.bg.hex}; color: ${data.pair.text.hex};">
       <span class="preview-text-normal">Normal Text (14pt)</span>
       <span class="preview-text-large">Large Text (18pt)</span>
     </div>

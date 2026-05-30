@@ -311,6 +311,17 @@
     }
     return text.trim();
   }
+  function isInlineTextTarget(el, style) {
+    if (el.tagName.toLowerCase() !== "a") return false;
+    if (style.display !== "inline") return false;
+    const text = getDirectText(el) || el.textContent?.trim() || "";
+    if (!text) return false;
+    return Boolean(
+      el.closest(
+        "p, li, blockquote, dd, dt, figcaption, caption, th, td, label"
+      )
+    );
+  }
   function extractElementPairs() {
     clearTrackedAttributes();
     tokenCache = null;
@@ -507,10 +518,11 @@
     ).forEach((el) => {
       if (!isContentVisible(el)) return;
       const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      if (isInlineTextTarget(el, style)) return;
       if (rect.width > 0 && rect.height > 0 && (rect.width < 24 || rect.height < 24)) {
         const id = el.getAttribute(TRACKED_ID_ATTR) || String(idCounter++);
         trackElement(id, el);
-        const style = window.getComputedStyle(el);
         pairs.push({
           id,
           textColor: "#ff0000",
@@ -761,6 +773,7 @@
   }
   function ensureCvdToolbar() {
     if (!document.body) return;
+    bindSimulationShortcut();
     if (!cvdToolbarStyle) {
       cvdToolbarStyle = document.createElement("style");
       cvdToolbarStyle.id = "chromacheck-cvd-toolbar-style";
@@ -1074,15 +1087,16 @@
     syncSplitLayout();
   }
   function applyVisionPresentation(shouldBroadcast = false) {
-    ensureCvdToolbar();
-    syncCvdToolbar();
     const hasSimulation = visionState.cvdMode && visionState.cvdMode !== "none" || visionState.lowVisionMode && visionState.lowVisionMode !== "none";
     const combinedFilter = getCombinedVisionFilter();
     removeFullPageMask();
     if (!hasSimulation) {
       document.documentElement.style.filter = "";
       destroySplitView();
+      destroyCvdToolbar();
     } else if (visionState.splitView) {
+      ensureCvdToolbar();
+      syncCvdToolbar();
       document.documentElement.style.filter = "";
       ensureSplitView();
       splitIframe.style.filter = combinedFilter;
@@ -1091,6 +1105,8 @@
       syncSplitLayout();
       syncSplitScroll();
     } else {
+      ensureCvdToolbar();
+      syncCvdToolbar();
       destroySplitView();
       document.documentElement.style.filter = combinedFilter;
       if (visionState.lowVisionMode === "field-loss") {
@@ -1137,9 +1153,22 @@
     document.addEventListener("keydown", handleSimulationShortcut, true);
     cvdShortcutBound = true;
   }
+  function unbindSimulationShortcut() {
+    if (!cvdShortcutBound) return;
+    document.removeEventListener("keydown", handleSimulationShortcut, true);
+    cvdShortcutBound = false;
+  }
+  function destroyCvdToolbar() {
+    cvdToolbar?.remove();
+    cvdPip?.remove();
+    cvdToolbarStyle?.remove();
+    cvdToolbar = null;
+    cvdPip = null;
+    cvdToolbarStyle = null;
+    unbindSimulationShortcut();
+  }
   function initColorBlindnessFilters() {
     if (document.getElementById("chromacheck-color-blind-filters")) {
-      bindSimulationShortcut();
       return;
     }
     const svgStr = `
@@ -1175,7 +1204,6 @@
     const div = document.createElement("div");
     div.innerHTML = svgStr;
     document.body.appendChild(div.firstElementChild);
-    bindSimulationShortcut();
   }
 
   // content/focus-audit.js
@@ -1192,18 +1220,19 @@
       outlineStyle: style.outlineStyle,
       borderColor: style.borderTopColor,
       borderWidth: parseFloat(style.borderTopWidth) || 0,
+      borderStyle: style.borderTopStyle,
       boxShadow: style.boxShadow
     };
   }
   function getFocusIndicator(before, after) {
-    if (after.outlineWidth > 0 && after.outlineStyle !== "none" && after.outlineColor !== before.outlineColor && !isTransparent(after.outlineColor)) {
+    if (after.outlineWidth > 0 && after.outlineStyle !== "none" && (after.outlineColor !== before.outlineColor || after.outlineWidth !== before.outlineWidth || after.outlineStyle !== before.outlineStyle) && !isTransparent(after.outlineColor)) {
       return { color: after.outlineColor, property: "outline-color" };
     }
     const afterShadowColor = parseShadowColor(after.boxShadow);
     if (after.boxShadow !== before.boxShadow && afterShadowColor && !isTransparent(afterShadowColor)) {
       return { color: afterShadowColor, property: "box-shadow" };
     }
-    if (after.borderWidth > 0 && after.borderColor !== before.borderColor && !isTransparent(after.borderColor)) {
+    if (after.borderWidth > 0 && after.borderStyle !== "none" && (after.borderColor !== before.borderColor || after.borderWidth !== before.borderWidth || after.borderStyle !== before.borderStyle) && !isTransparent(after.borderColor)) {
       return { color: after.borderColor, property: "border-color" };
     }
     return null;
@@ -1247,7 +1276,24 @@
       if (document.activeElement !== el) continue;
       const after = captureFocusStyles(el);
       const indicator = getFocusIndicator(before, after);
-      if (!indicator) continue;
+      if (!indicator) {
+        const id2 = el.getAttribute(TRACKED_ID_ATTR) || `focus-${String(index)}`;
+        trackElement(id2, el);
+        pairs.push({
+          id: id2,
+          textColor: "#ff0000",
+          bgColor: "#ff0000",
+          foregroundProperty: "outline-color",
+          selector,
+          textPreview: "Missing visible focus indicator",
+          tagName: el.tagName.toLowerCase(),
+          fontSize: "24px",
+          fontWeight: "400",
+          type: "focus-indicator",
+          focusProblem: "missing"
+        });
+        continue;
+      }
       const indicatorRgba = parseRGBA(indicator.color);
       if (!indicatorRgba || indicatorRgba.a === 0) continue;
       const outerPair = getRenderedPair(el.parentElement || el, indicatorRgba);
