@@ -155,15 +155,16 @@ export function renderPinned() {
 
   state.pinnedItems.forEach((item) => {
     const alert = getPinnedStatusAlert(item);
+    const label = item.selector || `${item.fg} on ${item.bg}`;
     const row = document.createElement("div");
     row.className = "pinned-row combo-row";
     row.innerHTML = `
       <div class="issue-row-main">
-        <div class="combo-preview-mini" style="background:${item.bg}; color:${item.fg}">
+        <div class="combo-preview-mini" style="background:${escapeAttribute(item.bg)}; color:${escapeAttribute(item.fg)}">
           Abc
         </div>
         <div class="combo-info">
-          <div class="combo-colors-label">${item.selector || `${item.fg} on ${item.bg}`}</div>
+          <div class="combo-colors-label">${escapeHtml(label)}</div>
           <div class="combo-scores">
             <div class="score-group">
               <span class="score-label">Ratio</span>

@@ -122,10 +122,11 @@ function createPopupHarness() {
             },
           };
         </script>
-        <script src="/chrome-extension/shared/contrast.js"></script>
+          <script src="/chrome-extension/shared/contrast.js"></script>
         <script type="module">
           import { state } from "/chrome-extension/popup/state.js";
-          import { filterCombinations, renderIssues } from "/chrome-extension/popup/render.js";
+          import { filterCombinations, renderIssues, renderPinned } from "/chrome-extension/popup/render.js";
+          import { normalizeSettings } from "/chrome-extension/popup/storage.js";
 
           function resetFilters(activeKey) {
             return { AAA: false, AA: false, "AA Large": false, Fail: false, [activeKey]: true };
@@ -194,10 +195,55 @@ function createPopupHarness() {
             renderIssues();
             const noResultsText = document.querySelector("#issues-list .no-results")?.textContent || "";
 
+            state.pinnedItems = [
+              {
+                id: "issue:unsafe",
+                type: "issue",
+                selector: '<img src=x onerror="window.__pinnedXss = true">',
+                fg: "#000000",
+                bg: "#ffffff",
+                wcagRatio: 1,
+                wcagLevel: "Fail",
+                level: "Fail",
+              },
+            ];
+            renderPinned();
+            const pinnedLabel = document.querySelector("#pinned-list .combo-colors-label")?.textContent || "";
+            const pinnedResult = {
+              hasImageNode: Boolean(document.querySelector("#pinned-list img")),
+              label: pinnedLabel,
+              executed: Boolean(window.__pinnedXss),
+            };
+            const normalizedSettings = normalizeSettings({
+              standard: "BAD",
+              cvdMode: "deuteranopia",
+              lowVisionMode: "unknown",
+              autoSync: "yes",
+              consoleWarnings: true,
+              splitView: false,
+              githubRepoUrl: "javascript:alert(1)",
+            });
+            const normalizedDefaultSettings = normalizeSettings({
+              standard: "BAD",
+              cvdMode: "deuteranopia",
+              lowVisionMode: "unknown",
+              autoSync: "yes",
+              consoleWarnings: true,
+              splitView: false,
+              githubRepoUrl: " https://github.com/example/repo ",
+            }, { withDefaults: true });
+            const normalizedPhishingSettings = normalizeSettings({
+              githubRepoUrl: "https://phishing.example.com/issues",
+            });
+
             return {
               comboResult,
               apcaFailPreviews,
               noResultsText,
+              pinnedResult,
+              normalizedSettings,
+              normalizedDefaultSettings,
+              normalizedPhishingSettings,
             };
           };
         </script>
@@ -239,6 +285,92 @@ function createFocusHarness() {
               selector: pair.selector,
               textPreview: pair.textPreview,
             }));
+          };
+        </script>
+      </body>
+    </html>`;
+}
+
+function createFocusActionHarness() {
+  return `<!doctype html>
+    <html lang="en">
+      <head><meta charset="utf-8"><title>Focus action harness</title></head>
+      <body>
+        ${popupElementIds.map((id) => `<div id="${escapeHtml(id)}"></div>`).join("\n")}
+        <script>
+          window.Worker = undefined;
+          window.chrome = {
+            tabs: {
+              query: async () => [{ id: 7, url: "https://example.test", title: "Example" }],
+              sendMessage: async (_tabId, message) => {
+                if (message.action === "auditFocusIndicators") return { pairs: [] };
+                if (message.action === "extractColors") {
+                  return { colors: [{ hex: "#000000", count: 1 }, { hex: "#ffffff", count: 1 }] };
+                }
+                return { ok: true };
+              },
+            },
+            storage: {
+              local: {
+                get: async () => ({}),
+                set: async () => {},
+                remove: async () => {},
+              },
+            },
+          };
+        </script>
+        <script src="/chrome-extension/shared/contrast.js"></script>
+        <script type="module">
+          import { state } from "/chrome-extension/popup/state.js";
+          import { handleFocusAudit } from "/chrome-extension/popup/actions.js";
+
+          window.runFocusActionCheck = async () => {
+            state.pageContext = {
+              title: "Example",
+              url: "https://example.test",
+              domain: "example.test",
+              supported: true,
+            };
+            state.palette = [{ hex: "#000000", count: 1 }, { hex: "#ffffff", count: 1 }];
+            state.colors = ["#000000", "#ffffff"];
+            state.elementPairs = [
+              {
+                id: "text-1",
+                type: "text",
+                selector: "p",
+                tagName: "p",
+                fontSize: "16px",
+                fontWeight: "400",
+                foregroundProperty: "color",
+                textColor: "#000000",
+                bgColor: "#ffffff",
+                textPreview: "Readable text",
+              },
+            ];
+            state.focusPairs = [
+              {
+                id: "stale-focus",
+                type: "focus-indicator",
+                selector: "button",
+                tagName: "button",
+                fontSize: "24px",
+                fontWeight: "400",
+                foregroundProperty: "outline-color",
+                textColor: "#ff0000",
+                bgColor: "#ff0000",
+                textPreview: "Missing visible focus indicator",
+                focusProblem: "missing",
+              },
+            ];
+            state.issues = [...state.focusPairs];
+
+            await handleFocusAudit();
+
+            return {
+              focusPairCount: state.focusPairs.length,
+              issueTypes: state.issues.map((issue) => issue.type),
+              statusText: document.getElementById("status-banner").textContent,
+            };
           };
         </script>
       </body>
@@ -320,6 +452,30 @@ test(
       result.noResultsText,
       "No page issues match the active APCA filters.",
     );
+    assert.equal(result.pinnedResult.hasImageNode, false);
+    assert.equal(result.pinnedResult.executed, false);
+    assert.equal(
+      result.pinnedResult.label,
+      '<img src=x onerror="window.__pinnedXss = true">',
+    );
+    assert.deepEqual(result.normalizedSettings, {
+      cvdMode: "deuteranopia",
+      consoleWarnings: true,
+      splitView: false,
+      githubRepoUrl: "",
+    });
+    assert.deepEqual(result.normalizedDefaultSettings, {
+      autoSync: false,
+      consoleWarnings: true,
+      cvdMode: "deuteranopia",
+      lowVisionMode: "none",
+      splitView: false,
+      standard: "WCAG21",
+      githubRepoUrl: "https://github.com/example/repo",
+    });
+    assert.deepEqual(result.normalizedPhishingSettings, {
+      githubRepoUrl: "",
+    });
   },
 );
 
@@ -341,5 +497,42 @@ test(
         textPreview: "Missing visible focus indicator",
       },
     ]);
+  },
+);
+
+test(
+  "focus audit clears stale focus issues when no focus pairs are detected",
+  { skip: puppeteerSkip },
+  async () => {
+    const result = await withBrowser(
+      { "/focus-action.html": createFocusActionHarness() },
+      "/focus-action.html",
+      (page) => page.evaluate(() => window.runFocusActionCheck()),
+    );
+
+    assert.equal(result.focusPairCount, 0);
+    assert.deepEqual(result.issueTypes, ["text"]);
+    assert.equal(
+      result.statusText,
+      "No focus indicators were detected on the current page.",
+    );
+  },
+);
+
+test(
+  "static app ignores malformed share palettes without crashing",
+  { skip: puppeteerSkip },
+  async () => {
+    const pageErrors = [];
+    await withBrowser({}, "/index.html?palette=%25", async (page) => {
+      page.on("pageerror", (error) => pageErrors.push(error.message));
+      await page.waitForSelector("#color-inputs .hex-input");
+      const values = await page.$$eval("#color-inputs .hex-input", (inputs) =>
+        inputs.map((input) => input.value),
+      );
+      assert.deepEqual(values, ["#0F172A", "#F8FAFC", "#3B82F6"]);
+    });
+
+    assert.deepEqual(pageErrors, []);
   },
 );

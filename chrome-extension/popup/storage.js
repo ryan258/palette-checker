@@ -1,13 +1,90 @@
 import { PICKER_STATE_KEY, ANALYSIS_BY_URL_KEY, PINNED_ITEMS_KEY, MAX_SAVED_ANALYSES, MAX_HISTORY_PER_PAGE, SETTINGS_KEY } from './constants.js';
 import { state } from './state.js';
 import { getIssueStableKey, normalizeSavedScan } from './utils.js';
+
+const VALID_STANDARDS = new Set(["WCAG21", "WCAG22", "APCA"]);
+const VALID_CVD_MODES = new Set([
+  "none",
+  "protanopia",
+  "protanomaly",
+  "deuteranopia",
+  "deuteranomaly",
+  "tritanopia",
+  "tritanomaly",
+  "achromatopsia",
+  "achromatomaly",
+]);
+const VALID_LOW_VISION_MODES = new Set([
+  "none",
+  "low-acuity",
+  "contrast-loss",
+  "field-loss",
+]);
+const DEFAULT_SETTINGS = {
+  autoSync: false,
+  consoleWarnings: false,
+  cvdMode: "none",
+  lowVisionMode: "none",
+  splitView: false,
+  standard: "WCAG21",
+  githubRepoUrl: "",
+};
+
+export function normalizeSettings(settings, options = {}) {
+  const normalized = options.withDefaults ? { ...DEFAULT_SETTINGS } : {};
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    return normalized;
+  }
+
+  if (typeof settings.autoSync === "boolean") {
+    normalized.autoSync = settings.autoSync;
+  }
+  if (typeof settings.consoleWarnings === "boolean") {
+    normalized.consoleWarnings = settings.consoleWarnings;
+  }
+  if (typeof settings.splitView === "boolean") {
+    normalized.splitView = settings.splitView;
+  }
+  if (VALID_STANDARDS.has(settings.standard)) {
+    normalized.standard = settings.standard;
+  }
+  if (VALID_CVD_MODES.has(settings.cvdMode)) {
+    normalized.cvdMode = settings.cvdMode;
+  }
+  if (VALID_LOW_VISION_MODES.has(settings.lowVisionMode)) {
+    normalized.lowVisionMode = settings.lowVisionMode;
+  }
+  if (typeof settings.githubRepoUrl === "string") {
+    try {
+      const trimmed = settings.githubRepoUrl.trim();
+      if (trimmed === "") {
+        normalized.githubRepoUrl = "";
+      } else {
+        const url = new URL(trimmed);
+        const host = url.hostname.toLowerCase();
+        const isValidHost =
+          host === "github.com" ||
+          host === "www.github.com" ||
+          host === "api.github.com";
+        normalized.githubRepoUrl =
+          url.protocol === "https:" && isValidHost ? url.href : "";
+      }
+    } catch {
+      normalized.githubRepoUrl = "";
+    }
+  }
+
+  return normalized;
+}
+
 export async function loadSettings() {
   const result = await chrome.storage.local.get([SETTINGS_KEY]);
   if (result[SETTINGS_KEY]) {
-    state.settings = { ...state.settings, ...result[SETTINGS_KEY] };
+    state.settings = { ...state.settings, ...normalizeSettings(result[SETTINGS_KEY]) };
   }
 }
 export async function saveSettings() {
+  state.settings = normalizeSettings(state.settings, { withDefaults: true });
   await chrome.storage.local.set({ [SETTINGS_KEY]: state.settings });
 }
 export async function readPickerState() {
@@ -95,7 +172,10 @@ export async function loadSavedAnalysis(url) {
 }
 export async function loadPinnedItems() {
   const result = await chrome.storage.local.get([PINNED_ITEMS_KEY]);
-  state.pinnedItems = (result[PINNED_ITEMS_KEY] || []).map((item) => {
+  const pinnedItems = Array.isArray(result[PINNED_ITEMS_KEY])
+    ? result[PINNED_ITEMS_KEY]
+    : [];
+  state.pinnedItems = pinnedItems.map((item) => {
     const normalizedKey =
       item.key ||
       (item.type === "combo"

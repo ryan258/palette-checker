@@ -15,7 +15,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: cli/package-lock.json
+      - name: Install CLI dependencies
+        run: npm ci --prefix cli
+      - name: Syntax check
+        run: |
+          for file in $(find . -name '*.js' -not -path './cli/node_modules/*' -not -path './.git/*'); do
+            node --check "$file"
+          done
+      - name: Extension tests
+        run: |
+          node --test chrome-extension/tests/contrast.test.js
+          node --test chrome-extension/tests/browser-behavior.test.js
+      - name: CLI tests
+        run: npm test --prefix cli
+      - name: Figma plugin tests
+        run: node --test figma-plugin/code.test.js
+
   deploy:
+    needs: test
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -172,6 +172,12 @@ export async function handleFocusAudit() {
     }
 
     if (!response?.pairs?.length) {
+      state.focusPairs = [];
+      await recomputeAnalysis({
+        colors: state.colors,
+        pairs: getCurrentAnalysisPairs(),
+      });
+      render();
       renderStatusBanner(
         "No focus indicators were detected on the current page.",
         "info",

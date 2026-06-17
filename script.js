@@ -665,6 +665,14 @@ function saveState() {
   }
 }
 
+function clearPersistedState() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage can be unavailable in strict privacy modes; startup should still continue.
+  }
+}
+
 function loadPersistedState() {
   let saved;
   try {
@@ -672,11 +680,11 @@ function loadPersistedState() {
     if (!raw) return;
     saved = JSON.parse(raw);
   } catch {
-    localStorage.removeItem(STORAGE_KEY);
+    clearPersistedState();
     return;
   }
   if (!saved || typeof saved !== "object") {
-    localStorage.removeItem(STORAGE_KEY);
+    clearPersistedState();
     return;
   }
   const palette = normalizePaletteValues(saved.colors);
@@ -709,7 +717,13 @@ function loadSharedPalette() {
   const raw = params.get(SHARE_PARAM);
   if (!raw) return false;
 
-  const values = raw.split(",").map((part) => decodeURIComponent(part.trim()));
+  const values = raw.split(",").map((part) => {
+    try {
+      return decodeURIComponent(part.trim());
+    } catch {
+      return part.trim();
+    }
+  });
   return applyPalette(values, {
     persist: true,
     message: "Palette loaded from URL.",
