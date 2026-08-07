@@ -25,7 +25,7 @@
 
 ## Root Static App File Inventory (exhaustive)
 - `index.html` — markup, SVG filter definitions, structure (~455 lines)
-- `script.js` — all application logic (~1,600 lines)
+- `script.js` — all application logic (~1,740 lines)
 - `styles.css` — all styling (~1,100 lines)
 - `README.md`, `CHANGELOG.md`, `ROADMAP.md` — documentation only
 - Sibling subprojects such as `cli/`, `chrome-extension/`, and `figma-plugin/` have their own manifests and are outside this root static-app constraint

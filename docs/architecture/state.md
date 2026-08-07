@@ -7,6 +7,7 @@ state = {
   activeFilters: { AAA: bool, AA: bool, "AA Large": bool, Fail: bool },
   apcaInformationalOnly: boolean,             // true = WCAG drives filtering
   colorFormat: "hex" | "rgb" | "hsl" | "oklch",
+  colorBlindness: string,                     // CVD simulation id, or "none"
   imageBackground: string,                    // validated http(s), data, or blob URL
   imageSampleHex: string,                     // sampled #rrggbb or empty
   imageSampleStatus: string,                  // plain status text
@@ -21,6 +22,7 @@ state = {
 - `state.activeFilters` — all four keys always present. Initialized to `true`
 - `state.apcaInformationalOnly` — when `true`, WCAG levels drive card filtering; when `false`, APCA levels drive it
 - `state.colorFormat` — controls input/card display formatting only. Stored colors remain hex
+- `state.colorBlindness` — SVG filter id applied to the combinations grid (`protanopia`, `deuteranopia`, `tritanopia`, `achromatopsia`, …) or `"none"`. Presentation-only; never alters stored hex values
 - `state.imageBackground` — restored through URL protocol validation before use
 - `state.imageSampleHex` — sampled average background, validated as hex before restore
 - `state.imageSampleStatus` — display-only text, normalized before restore and rendered with `textContent`
@@ -30,6 +32,7 @@ state = {
 - **Colors axis** is independent of **Filters axis**: changing a color never changes filter state, and vice versa
 - **APCA toggle axis** is independent of both: flipping the mode changes how cards are classified but doesn't alter `colors` or `activeFilters`
 - **Format axis** is display-only: changing it never rewrites `state.colors`
+- **Color blindness axis** is presentation-only: it swaps a CSS filter class on the grid and never rewrites `state.colors` or reclassifies compliance levels
 - **Image sampling axis** is preview-only: changing it never rewrites palette colors
 - **Export axis** is output-only: changing it never rewrites palette colors or filters
 - Each state mutation triggers exactly ONE render cycle:
@@ -38,11 +41,12 @@ state = {
   - `activeFilters` changed → `filterCombinations()` only
   - `apcaInformationalOnly` changed → `renderCombinations()` (reclassify all cards)
   - `colorFormat` changed → `renderColorInputs()` (same palette, different presentation)
+  - `colorBlindness` changed → swap the `filter-*` class on `combinationsGrid`. No re-render
   - `imageBackground` / `imageSampleHex` changed → `renderImagePreview()` only
   - `exportMode` changed → `renderExportOutput()` only
 
 ## Mutation Rules
-- **Only state mutator functions may write to `state`**: `addColor`, `removeColor`, `updateColor`, `applyPalette`, `applyImageBackground`, and the specific filter/format/export event handlers
+- **Only state mutator functions may write to `state`**: `addColor`, `removeColor`, `updateColor`, `applyPalette`, `applyImageBackground`, and the specific filter/format/color-blindness/export event handlers
 - **Never mutate `state` inside**: renderers, calculators, event handlers (handlers call mutators)
 - **Never read DOM to derive state**: State is the source of truth. DOM reflects state, not the reverse
 - **Array mutations**: Use `push()` to add, `splice()` to remove. Never reassign `state.colors` entirely

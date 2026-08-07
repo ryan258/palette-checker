@@ -4,6 +4,39 @@ All notable completed work is documented here, organized by the phase in which i
 
 ---
 
+## Contrast Accuracy Audit (post-Phase 10)
+
+A code review of the shared calculation engine found three scoring defects. All are fixed and verified against the APCA-W3 reference.
+
+- **APCA low-contrast offset** -- `calcAPCA()` omitted the `0.027` offset, inflating every `Lc` by 2.70 and grading ~6% of pairs too generously. Now matches APCA-W3 0.1.9 exactly across 355,008 verified pairs.
+- **Monotonic APCA compliance** -- `getAPCAComplianceLevel()` ranked large text below small text at the same `Lc`, corrupting the severity sort in `buildCombinationsData` and `buildIssuesData`. Reordered; zero inversions across `Lc` 0-110.
+- **Parity with the main app** -- the extension and web app graded identical colors differently. Signatures and thresholds unified; 0 mismatches across 28,749 pairs.
+
+### Background-Image Awareness
+
+`buildRenderChain()` only composites `background-color`, so an element over a hero image or gradient is scored against the solid color underneath. That limitation was previously silent.
+
+- `getRenderedPair()` now reports `hasBackgroundImage` when any element in the render chain paints an image or gradient.
+- The flag is set on all six color-contrast pair types -- text, link-contrast, non-text (SVG), non-text (border), placeholder, and focus-indicator. `target-size` is excluded, since it is not a color check.
+- `getIssueExplanation()` appends an explicit note so the score is not read as authoritative.
+- The flag persists through `summarizeIssuesForStorage()`, so the note survives a reload from scan history.
+
+### Performance
+
+- Fix-suggestion search is memoized with a bounded 500-entry cache. Every issue in a group shares `textColor` / `bgColor` (both part of the group key), so one entry now serves the whole group: `renderIssues()` at 500 issues dropped from ~206ms to <1ms.
+
+### Popup & Settings
+
+- The GitHub repository URL field no longer writes to `chrome.storage` and re-renders the issue list on every keystroke. `input` updates in-memory state only; `change` / `blur` commit. This also fixes partial URLs being blanked mid-typing by `normalizeSettings`.
+- `isVisible()` now uses `parseFloat(style.opacity) > 0`, consistent with `isContentVisible()`. The previous string comparison treated `"0.0"` as visible.
+
+### Build
+
+- `shared/contrast.esm.js` resolves `globalThis.*` at call time rather than module-evaluation time, so a `popup.html` script-order regression fails loudly instead of exporting 33 `undefined` values.
+- CI enforces bundle freshness. `content/content.js` is a committed build artifact and is the only code that actually runs on a page -- editing anything under `content/` requires re-running `build.sh` and committing the result. See ADR-13.
+
+---
+
 ## Phase 0: Foundation
 
 The MVP. Extract colors, check contrast, zero dependencies.

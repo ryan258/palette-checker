@@ -60,7 +60,8 @@ chrome-extension/
 |   |-- mutation.js            # MutationObserver setup and debounced notifications
 |   +-- message-handler.js     # chrome.runtime.onMessage dispatch to modules
 |-- shared/
-|   +-- contrast.js            # Pure contrast math (WCAG, APCA, CVD, fixes)
+|   |-- contrast.js            # Pure contrast math (WCAG, APCA, CVD, fixes)
+|   +-- contrast.esm.js        # ES module facade over contrast.js for popup/ imports
 |-- popup/
 |   |-- popup.html             # Side panel UI
 |   |-- popup.css              # Dark theme design system
@@ -85,7 +86,8 @@ chrome-extension/
 |   +-- sidebar.js             # Per-element contrast annotations
 |-- icons/                     # Toolbar icons (16/48/128px)
 +-- tests/
-    +-- contrast.test.js       # Unit tests (Node.js test runner)
+    |-- contrast.test.js           # Unit tests for the pure math layer
+    +-- browser-behavior.test.js   # Puppeteer DOM integration tests
 ```
 
 ## Architecture
@@ -109,10 +111,17 @@ The popup loads ES modules directly (no bundling needed). The content script mod
 ## Running Tests
 
 ```bash
-node --test tests/contrast.test.js
+node --test tests/contrast.test.js          # pure math, no dependencies
+node --test tests/browser-behavior.test.js  # DOM integration, needs Puppeteer
 ```
 
-Tests cover WCAG/APCA compliance levels, fix suggestions, simulation-aware contrast changes, standard-specific filtering, and the shared pure analysis helpers used by the worker.
+`contrast.test.js` covers WCAG/APCA compliance levels, APCA conformance against reference values, fix suggestions, simulation-aware contrast changes, standard-specific filtering, and the shared pure analysis helpers used by the worker.
+
+`browser-behavior.test.js` drives a real page through Puppeteer to cover APCA-mode filtering, focus-audit pair emission, stale focus-issue clearing, and malformed share-palette handling. It resolves Puppeteer from `cli/node_modules` and **skips silently if Puppeteer is not installed** -- a green local run without `npm ci --prefix cli` means these four tests did not execute. CI installs it, so they always run there.
+
+### Changing the content script
+
+`content/content.js` is a committed esbuild bundle and is the only content-script code that actually runs on a page. After editing anything under `content/`, re-run `./build.sh` and commit the regenerated bundle -- source-only changes are inert at runtime. CI enforces this with `build.sh` followed by `git diff --exit-code`.
 
 ## Permissions
 
@@ -122,6 +131,9 @@ Tests cover WCAG/APCA compliance levels, fix suggestions, simulation-aware contr
 | `scripting` | Inject analysis scripts |
 | `storage` | Persist settings, scan history, and pinned items |
 | `sidePanel` | Keep the panel open while interacting with the page |
+| `host_permissions` (`http://*/*`, `https://*/*`, `file://*/*`) | Message the content script on any page you choose to scan, including local files |
+
+Nothing is transmitted off-device. Scan history, pins, and settings live in `chrome.storage.local`; the only outbound link is the GitHub issue draft you explicitly click, and that target URL is validated against `github.com` over HTTPS before use.
 
 ## Browser Support
 

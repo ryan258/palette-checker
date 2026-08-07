@@ -14,6 +14,7 @@
 - `getWCAGLevel(ratio)` / `getAPCALevel(lc)` → `"AAA"|"AA"|"AA Large"|"Fail"`
 - `isValidHex(hex)` → bool | `parseHexInput(value)` → valid `#rrggbb` or `null`
 - **Rule**: These functions are the ONLY place contrast math lives. Do not duplicate formulas
+- **Memoization exception**: color-suggestion searches (`findNearestPassingColor` in `script.js`, `getSuggestedFixes` in `shared/contrast.js`) keep a module-level `Map` cache keyed on their inputs. This is the ONLY permitted module state in Layer 1. The cache must be bounded (FIFO eviction at 500 entries) and must never change a return value for a given input — it is a speed optimization, not behavior
 
 ## Layer 2: Data Generation (reads state, returns data — no DOM)
 - `getColorPairs()` → array of `{textColor, bgColor}` from `state.colors`

@@ -25,3 +25,12 @@ This roadmap outlines potential future features and enhancements for the WCAG Co
 
 - [x] **Figma Plugin**: Port the core logic into a Figma plugin so designers can check contrast directly on their artboards.
 - [x] **Browser Extension**: Chrome extension MVP with a persistent side panel, page color extraction, contrast matrix, element picker, and a shared WCAG 2.1 + APCA calculation engine. See [`chrome-extension/ROADMAP.md`](chrome-extension/ROADMAP.md) for the full extension roadmap.
+- [x] **Headless CLI**: `chromacheck <url> --standard --threshold --format` in [`cli/`](cli/), running the shared contrast engine over a Puppeteer-rendered page with non-zero exit codes for CI gating.
+
+## Phase 5: Engine Integrity
+
+- [x] **APCA Reference Conformance**: `calcAPCA()` verified to match APCA-W3 0.1.9 exactly, including the low-contrast offset. See [`CHANGELOG.md`](CHANGELOG.md).
+- [x] **Cross-Surface Parity**: Web app and extension verified to produce identical APCA scores and compliance grades for the same input.
+- [x] **Bundle Freshness Enforcement**: CI fails if the committed content-script bundle drifts from its sources.
+- [ ] **Single Source of Contrast Math**: The engine is currently reimplemented in `script.js`, `chrome-extension/shared/contrast.js`, `chrome-extension/content/color-utils.js`, and `figma-plugin/ui.html`. Parity is verified by test rather than guaranteed by structure. Collapse to one shared module the zero-build web app can consume without a bundler.
+- [ ] **Background Image Contrast**: Elements over images or gradients are scored against the solid color underneath. The extension now flags this; neither surface measures it. Sample the dominant stop or the rendered pixels.

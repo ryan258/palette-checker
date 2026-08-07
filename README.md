@@ -11,8 +11,28 @@ Live Demo: [https://ryan258.github.io/palette-checker/](https://ryan258.github.i
 - **Flexible Filter Mode**: Keep APCA as informational data by default, or uncheck the APCA mode toggle to make APCA levels drive combination filtering.
 - **Color Blindness Simulator**: View your palette through 7 scientifically accurate filters simulating Dichromacy (Protanopia, Deuteranopia, Tritanopia), Anomalous Trichromacy, and Monochromacy.
 - **Dynamic Color Management**: Add or remove colors seamlessly (minimum 2, maximum 9).
+- **Auto-Fix Suggestions**: When a pair fails, get the nearest passing color in the same hue family for AA or AAA, applied in one click.
+- **Color Format Toggles**: Enter and display colors as HEX, RGB, HSL, or OKLCH. Stored values stay canonical hex.
+- **Palette Persistence & Sharing**: Palettes survive reloads via `localStorage`, export/import as JSON, or share as a URL.
+- **CSS & Tailwind Export**: Generate a ready-to-paste `:root` custom property block or Tailwind theme config.
+- **Color Harmony Generator**: Build complementary, triadic, or analogous palettes from any base color and test them immediately.
+- **Design & Typography Previews**: See the palette as theme, button, and banner tiles, and check text at 14px through 24px bold against the "Large Text" thresholds.
+- **Image Background Testing**: Upload an image or paste a URL to sample its average background and score text against it.
 - **Premium Design**: Built with a sleek glassmorphism aesthetic, custom interactive inputs, dynamic fluid layouts, and smooth micro-animations.
 - **Zero Build Dependencies**: Developed with Vanilla HTML, CSS, and JavaScript for an ultra-lightweight, zero-build experience.
+
+## Beyond the Web App
+
+The same contrast engine ships on four surfaces:
+
+| Surface | What it's for |
+|---------|---------------|
+| **Web app** (this repo root) | Design a palette from scratch and check every pair. |
+| **[Chrome extension](chrome-extension/)** | Audit a live webpage: element-pair detection, focus and theme audits, CVD simulation, fix previews, DevTools integration. |
+| **[CLI](cli/)** | Headless auditing for CI: `chromacheck <url> --format=json --threshold=AA`, non-zero exit on failure. |
+| **[Figma plugin](figma-plugin/)** | Check contrast across a selection before any code is written. |
+
+APCA scoring is verified against the APCA-W3 0.1.9 reference implementation, and the web app and extension are checked for identical output.
 
 ## Quick Start
 
@@ -37,9 +57,31 @@ Since this project has zero build-time dependencies, running it locally is incre
 
 ## Project Structure
 
+The static web app is the three files at the repository root. Everything else is a sibling subproject with its own README.
+
 - `index.html`: The main structured document containing the UI layout.
 - `styles.css`: The stylesheet leveraging modern CSS Variables, Grid/Flexbox, `backdrop-filter`, and CSS animations.
 - `script.js`: State, accessibility logic, contrast math, and dynamic rendering behavior.
+- `chrome-extension/`: Manifest V3 extension (side panel, content scripts, DevTools panel).
+- `cli/`: Headless Puppeteer-based auditor. The only subproject with npm dependencies.
+- `figma-plugin/`: Zero-build Figma plugin.
+- `docs/`: [User guide](docs/USER-GUIDE.md) and [architecture docs](docs/architecture/) — the tech-stack, state, boundary, and ADR constraints all four surfaces are held to.
+
+Only `index.html`, `script.js`, and `styles.css` are published to GitHub Pages.
+
+## Testing
+
+The web app itself has no build or test step. The subprojects do:
+
+```bash
+npm ci --prefix cli                                        # once, for Puppeteer
+node --test chrome-extension/tests/contrast.test.js         # pure contrast math
+node --test chrome-extension/tests/browser-behavior.test.js # DOM integration
+node --test cli/cli.test.js
+node --test figma-plugin/code.test.js
+```
+
+CI runs all four suites plus a syntax check and a content-script bundle freshness gate before deploying.
 
 ## Technology Stack
 

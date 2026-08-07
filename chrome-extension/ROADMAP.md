@@ -14,7 +14,11 @@ The extension has a complete scan-to-fix pipeline: extract page colors, detect r
 
 The core engine (`shared/contrast.js`) is solid. The DOM analysis in `content/content.js` handles real-world complexity well -- shadow DOM, opacity inheritance, semi-transparent compositing.
 
-**Modularization is complete.** Both the content script and the popup have been split into focused single-responsibility modules. The content script modules are bundled into `content/content.js` via `build.sh`. The popup modules load as ES modules directly. Test coverage still only reaches the pure math layer -- DOM integration tests are the next structural priority.
+**Modularization is complete.** Both the content script and the popup have been split into focused single-responsibility modules. The content script modules are bundled into `content/content.js` via `build.sh`. The popup modules load as ES modules directly.
+
+**DOM integration testing has started.** `tests/browser-behavior.test.js` drives a real page through Puppeteer and covers APCA-mode filtering, focus-audit pair emission, stale focus-issue clearing, and malformed share-palette handling. Coverage is still thin against the scenario list in Priority 2 -- compositing, shadow DOM, and the picker remain untested.
+
+**The contrast engine has been audited against APCA-W3 0.1.9.** Three scoring defects were found and fixed (missing low-contrast offset, non-monotonic compliance tiers, extension/web-app divergence). See [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -67,8 +71,8 @@ Split the UI layer:
 
 The pure math in `shared/contrast.js` is tested. The DOM interaction layer -- where the extension spends 90% of its code and where real bugs happen -- is not.
 
-- [ ] Create a test fixture HTML page with known contrast scenarios: semi-transparent overlays, nested opacity, hidden elements, shadow DOM, placeholder text, focus indicators, SVG icons, undersized targets
-- [ ] Add integration tests using Puppeteer or Playwright that load the fixture page, run the content script, and assert the detected pairs and issues match expected results
+- [x] Add integration tests using Puppeteer that load a real page, run the content script, and assert behavior -- `tests/browser-behavior.test.js` covers APCA-mode filtering, focus-audit pair emission, stale focus-issue clearing, and malformed share-palette handling. Runs in CI
+- [ ] Create a test fixture HTML page with known contrast scenarios: semi-transparent overlays, nested opacity, hidden elements, shadow DOM, placeholder text, SVG icons, undersized targets
 - [ ] Test the element picker (hover produces correct tooltip data, click produces correct picked result)
 - [ ] Test CVD filter injection (filters are inserted, page filter style is applied, cleanup works)
 - [ ] Test effective background compositing against manually calculated expected values
@@ -110,7 +114,7 @@ Several features are implemented thinly enough that they mislead users or contri
 ### Not yet implemented (remove false checkmarks)
 
 - [ ] **HTML/PDF report export** -- Only JSON export exists. Either build a self-contained HTML report or stop claiming HTML/PDF support.
-- [ ] **CLI / Node API** -- `shared/contrast.js` being CommonJS-exportable is not a CLI. Remove this claim until an actual CLI is built.
+- [x] **CLI / Node API** -- A real CLI now exists at [`cli/`](../cli/): `chromacheck <url> --standard --threshold --format` via Puppeteer plus the shared contrast library, with exit codes for CI. Pure audit logic lives in `cli/cli-helpers.js` and is unit-tested without Puppeteer.
 - [ ] **Firefox validation** -- Manifest metadata is present but the extension has not been validated on Firefox. Remove the claim of full Firefox support until tested.
 - [ ] **WCAG 2.2 focus appearance (SC 2.4.11/2.4.12)** -- Focus indicator contrast is checked, but the full focus appearance criteria (minimum area, change of contrast) are not implemented.
 
@@ -135,10 +139,8 @@ JSON export is useful for tooling but not for humans. A self-contained HTML repo
 These are valuable but should not be started until Priorities 1-5 are complete.
 
 - **Incremental scanning** -- Use MutationObserver to track changes and only re-analyze affected subtrees instead of full DOM walks
-- **CLI / headless mode** -- `npx chromacheck audit https://example.com --format=json --threshold=AA` using Puppeteer + the shared contrast library
 - **Firefox Add-on** -- Validate the extension on Firefox, fix any side-panel or DevTools API differences
-- **Figma plugin** -- Analyze contrast in design files before code is written
-- **CI integration** -- JSON output from CLI piped into GitHub Actions / GitLab CI with pass/fail exit codes
+- **CI integration** -- Document a copy-paste GitHub Actions / GitLab CI job wrapping the CLI. The pieces exist (`--format=json`, non-zero exit on failure, `--disable-sandbox` for containers); the recipe is not written down
 - **Design token-aware reporting** -- Report issues in terms of design system tokens, not raw hex values: "Your `--text-muted` token fails AA on `--bg-surface`"
 - **WCAG 2.2 full compliance mode** -- Complete SC 2.4.11/2.4.12 (focus appearance area and contrast change), SC 2.4.13 (focus not obscured)
 
@@ -154,7 +156,7 @@ These guide every decision:
 
 3. **Context over extraction.** A flat color palette is a lie. Real accessibility issues live in the relationship between specific elements. Always show what's actually on the page.
 
-4. **Zero-dependency core.** The calculation engine stays pure, portable, and auditable. No npm install in the output. The same `shared/contrast.js` runs in the extension, tests, and future CLI.
+4. **Zero-dependency core.** The calculation engine stays pure, portable, and auditable. No npm install in the output. The same `shared/contrast.js` runs in the extension, the tests, and the CLI.
 
 5. **Speed is a feature.** First results in under 500ms. A tool people avoid opening is a tool that doesn't improve accessibility.
 
