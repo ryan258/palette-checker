@@ -10,7 +10,12 @@ A full code review of all four surfaces (web app, extension, CLI, Figma plugin) 
 
 - **APCA low-contrast offset (critical)**: `calcAPCA()` omitted the `loBoWoffset` / `loWoBoffset` term of `0.027`, inflating every reported `Lc` by exactly 2.70. Roughly 6% of color pairs received a **too-generous** grade — reporting a pass where the standard says fail. Now applied in both `script.js` and `chrome-extension/shared/contrast.js`; verified to match APCA-W3 0.1.9 exactly (max delta `0.00e+0`) across 355,008 color pairs.
 - **Non-monotonic APCA grading (critical)**: `getAPCAComplianceLevel()` evaluated the large-text branch before the `Lc >= 60` body-text branch, so large text graded *worse* than small text at identical `Lc` (e.g. `Lc 62` → `"AA Large"` for 24px but `"AA"` for 16px). Since compliance rank drives the "worst first" sort, this pushed passing large-text pairs above genuinely worse failures. Reordered; zero inversions remain across `Lc` 0–110.
-- **Web app / extension divergence (critical)**: the two `getAPCAComplianceLevel()` implementations had different signatures and thresholds, so the same colors graded differently depending on which surface you used. Signatures and thresholds unified; verified 0 mismatches across 28,749 pairs.
+- **Web app / extension divergence (critical)**: the two `getAPCAComplianceLevel()` implementations had different signatures and thresholds, so the same colors graded differently depending on which surface you used. Signatures and thresholds unified.
+
+### Added — Contrast Engine Regression Suite
+
+- **`chrome-extension/tests/parity.test.js`** guards the three defects above so they cannot silently return. On every CI run it compares the web app's inline engine against `shared/contrast.js` across 42,050 color pairs and four typography settings (168,200 grade comparisons), checks both implementations against an independently transcribed APCA-W3 0.1.9 reference requiring *exact* equality, and asserts tier monotonicity and polarity as properties.
+- The suite is mutation-tested: dropping the `0.027` offset in either file, restoring the non-monotonic tier ordering, or altering a single APCA coefficient each cause it to fail. Renaming a function it reads out of `script.js` fails loudly rather than silently skipping the comparison.
 
 ### Fixed — Web App
 

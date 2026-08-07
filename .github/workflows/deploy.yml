@@ -36,6 +36,7 @@ jobs:
       - name: Extension tests
         run: |
           node --test chrome-extension/tests/contrast.test.js
+          node --test chrome-extension/tests/parity.test.js
           node --test chrome-extension/tests/browser-behavior.test.js
       - name: Verify bundle freshness
         run: |

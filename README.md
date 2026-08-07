@@ -65,7 +65,7 @@ The static web app is the three files at the repository root. Everything else is
 - `chrome-extension/`: Manifest V3 extension (side panel, content scripts, DevTools panel).
 - `cli/`: Headless Puppeteer-based auditor. The only subproject with npm dependencies.
 - `figma-plugin/`: Zero-build Figma plugin.
-- `docs/`: [User guide](docs/USER-GUIDE.md) and [architecture docs](docs/architecture/) — the tech-stack, state, boundary, and ADR constraints all four surfaces are held to.
+- `docs/`: [Full documentation](docs/) — user guide, task recipes, result interpretation, known limitations, and the architecture constraints all four surfaces are held to.
 
 Only `index.html`, `script.js`, and `styles.css` are published to GitHub Pages.
 

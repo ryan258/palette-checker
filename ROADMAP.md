@@ -29,8 +29,8 @@ This roadmap outlines potential future features and enhancements for the WCAG Co
 
 ## Phase 5: Engine Integrity
 
-- [x] **APCA Reference Conformance**: `calcAPCA()` verified to match APCA-W3 0.1.9 exactly, including the low-contrast offset. See [`CHANGELOG.md`](CHANGELOG.md).
-- [x] **Cross-Surface Parity**: Web app and extension verified to produce identical APCA scores and compliance grades for the same input.
+- [x] **APCA Reference Conformance**: `calcAPCA()` matches APCA-W3 0.1.9 exactly, including the low-contrast offset. Enforced every CI run against an independently transcribed reference. See [`CHANGELOG.md`](CHANGELOG.md).
+- [x] **Cross-Surface Parity**: CI compares the web app and extension implementations across 42,050 color pairs and four typography settings, covering APCA scores, WCAG ratios, and both compliance ladders (`chrome-extension/tests/parity.test.js`).
 - [x] **Bundle Freshness Enforcement**: CI fails if the committed content-script bundle drifts from its sources.
 - [ ] **Single Source of Contrast Math**: The engine is currently reimplemented in `script.js`, `chrome-extension/shared/contrast.js`, `chrome-extension/content/color-utils.js`, and `figma-plugin/ui.html`. Parity is verified by test rather than guaranteed by structure. Collapse to one shared module the zero-build web app can consume without a bundler.
 - [ ] **Background Image Contrast**: Elements over images or gradients are scored against the solid color underneath. The extension now flags this; neither surface measures it. Sample the dominant stop or the rendered pixels.

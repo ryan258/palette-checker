@@ -112,10 +112,18 @@ The popup loads ES modules directly (no bundling needed). The content script mod
 
 ```bash
 node --test tests/contrast.test.js          # pure math, no dependencies
+node --test tests/parity.test.js            # cross-surface parity, no dependencies
 node --test tests/browser-behavior.test.js  # DOM integration, needs Puppeteer
 ```
 
 `contrast.test.js` covers WCAG/APCA compliance levels, APCA conformance against reference values, fix suggestions, simulation-aware contrast changes, standard-specific filtering, and the shared pure analysis helpers used by the worker.
+
+`parity.test.js` guards the boundary between the two contrast implementations. The root
+`script.js` cannot import modules (the web app is deliberately build-free), so it carries
+its own copy of the engine. This suite lifts those functions out of the source and compares
+them against `shared/contrast.js` across 42,050 color pairs, verifies both against an
+independently transcribed APCA-W3 reference, and asserts tier monotonicity. **If you change
+contrast math in one file, change it in both** — this is what catches you if you don't.
 
 `browser-behavior.test.js` drives a real page through Puppeteer to cover APCA-mode filtering, focus-audit pair emission, stale focus-issue clearing, and malformed share-palette handling. It resolves Puppeteer from `cli/node_modules` and **skips silently if Puppeteer is not installed** -- a green local run without `npm ci --prefix cli` means these four tests did not execute. CI installs it, so they always run there.
 
