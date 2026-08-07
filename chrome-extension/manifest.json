@@ -4,6 +4,7 @@
   "description": "WCAG 2.1 & APCA contrast checker for any webpage. Extract colors and instantly analyze accessibility compliance.",
   "version": "1.0.0",
   "permissions": ["activeTab", "scripting", "storage", "sidePanel"],
+  "host_permissions": ["http://*/*", "https://*/*", "file://*/*"],
   "action": {
     "default_title": "Open ChromaCheck",
     "default_icon": {
