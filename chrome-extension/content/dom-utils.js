@@ -85,6 +85,8 @@ export function getRenderedPair(el, textRGBA) {
   let background = backdrops[0];
   let text = compositeOver(textRGBA, background);
 
+  const hasBackgroundImage = chain.some((item) => item.hasBackgroundImage);
+
   for (let i = 0; i < chain.length; i++) {
     const opacity = Number.isFinite(chain[i].opacity)
       ? Math.max(0, Math.min(1, chain[i].opacity))
@@ -97,7 +99,7 @@ export function getRenderedPair(el, textRGBA) {
     text = applyOpacity(text, opacity, outsideBackdrop);
   }
 
-  return { text, background };
+  return { text, background, hasBackgroundImage };
 }
 export function getMinimalSelector(el) {
   if (el.id) return "#" + CSS.escape(el.id);

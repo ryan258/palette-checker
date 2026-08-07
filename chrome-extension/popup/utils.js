@@ -130,20 +130,32 @@ export function getIssueTargetRatio(issue) {
   return 4.5;
 }
 export function getIssueExplanation(issue) {
+  let explanation = "";
   switch (issue.type) {
     case "target-size":
       return "Small targets force extra precision, which slows down people using touch, switch access, or screen magnification.";
     case "link-contrast":
-      return "Links that differ from surrounding text by color alone are easy to miss for people with color-vision differences or low contrast sensitivity.";
+      explanation = "Links that differ from surrounding text by color alone are easy to miss for people with color-vision differences or low contrast sensitivity.";
+      break;
     case "focus-indicator":
-      return "Weak focus rings make keyboard navigation unreliable because people can lose track of which control is active.";
+      explanation = "Weak focus rings make keyboard navigation unreliable because people can lose track of which control is active.";
+      break;
     case "placeholder":
-      return "Low-contrast placeholder text disappears quickly under glare, fatigue, and low vision, which makes forms harder to understand.";
+      explanation = "Low-contrast placeholder text disappears quickly under glare, fatigue, and low vision, which makes forms harder to understand.";
+      break;
     case "non-text":
-      return "UI graphics and control outlines still need clear contrast so people can recognize controls and icons without guessing.";
+      explanation = "UI graphics and control outlines still need clear contrast so people can recognize controls and icons without guessing.";
+      break;
     default:
-      return "Low text contrast increases reading effort, especially for people with low vision, cognitive fatigue, or washed-out displays.";
+      explanation = "Low text contrast increases reading effort, especially for people with low vision, cognitive fatigue, or washed-out displays.";
+      break;
   }
+
+  if (issue?.hasBackgroundImage) {
+    explanation += " (Note: Element sits over a background image or gradient; score is based on underlying solid fallback.)";
+  }
+
+  return explanation;
 }
 export function buildCssFixRule(option) {
   return `/* ChromaCheck fix: contrast ${formatContrastRatio(option.beforeRatio)} -> ${formatContrastRatio(option.afterRatio)} */\n${option.selector} { ${option.property}: ${option.suggestion}; }`;

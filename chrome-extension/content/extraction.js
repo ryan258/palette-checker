@@ -217,6 +217,7 @@ export function extractElementPairs() {
           tagName: el.tagName.toLowerCase(),
           fontSize: style.fontSize,
           fontWeight: style.fontWeight,
+          hasBackgroundImage: Boolean(renderedPair.hasBackgroundImage),
           type: "text",
         });
       }
@@ -255,6 +256,7 @@ export function extractElementPairs() {
           tagName: "a",
           fontSize: linkStyle.fontSize,
           fontWeight: linkStyle.fontWeight,
+          hasBackgroundImage: Boolean(getRenderedPair(linkEl, parseRGBA(linkStyle.color) || { r: 0, g: 0, b: 0, a: 1 }).hasBackgroundImage),
           type: "link-contrast",
         });
       }
@@ -305,6 +307,7 @@ export function extractElementPairs() {
       tagName: svgEl.tagName.toLowerCase(),
       fontSize: "24px", // Assume large for graphical objects in WCAG 2.1 mapping
       fontWeight: "400",
+      hasBackgroundImage: Boolean(renderedPair.hasBackgroundImage),
       type: "non-text",
     });
   });
@@ -346,6 +349,7 @@ export function extractElementPairs() {
               tagName: el.tagName.toLowerCase(),
               fontSize: "24px", // Map graphical to large text equivalent logic
               fontWeight: "400",
+              hasBackgroundImage: Boolean(renderedPair.hasBackgroundImage),
               type: "non-text",
             });
             break; // Just log one border fail per element to reduce noise
@@ -380,6 +384,7 @@ export function extractElementPairs() {
           tagName: el.tagName.toLowerCase(),
           fontSize: phStyle.fontSize || style.fontSize,
           fontWeight: phStyle.fontWeight || style.fontWeight,
+          hasBackgroundImage: Boolean(renderedPair.hasBackgroundImage),
           type: "placeholder",
         });
       }

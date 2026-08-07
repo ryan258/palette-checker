@@ -148,6 +148,7 @@ export async function auditFocusIndicators() {
       tagName: el.tagName.toLowerCase(),
       fontSize: "24px",
       fontWeight: "400",
+      hasBackgroundImage: Boolean(outerPair?.hasBackgroundImage || innerPair?.hasBackgroundImage),
       type: "focus-indicator",
     });
   }

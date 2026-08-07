@@ -140,6 +140,7 @@
     const backdrops = getBackdropsForChain(chain);
     let background = backdrops[0];
     let text = compositeOver(textRGBA, background);
+    const hasBackgroundImage = chain.some((item) => item.hasBackgroundImage);
     for (let i = 0; i < chain.length; i++) {
       const opacity = Number.isFinite(chain[i].opacity) ? Math.max(0, Math.min(1, chain[i].opacity)) : 1;
       if (opacity >= 1) continue;
@@ -147,7 +148,7 @@
       background = applyOpacity(background, opacity, outsideBackdrop);
       text = applyOpacity(text, opacity, outsideBackdrop);
     }
-    return { text, background };
+    return { text, background, hasBackgroundImage };
   }
   function getMinimalSelector(el) {
     if (el.id) return "#" + CSS.escape(el.id);
@@ -386,6 +387,7 @@
             tagName: el.tagName.toLowerCase(),
             fontSize: style.fontSize,
             fontWeight: style.fontWeight,
+            hasBackgroundImage: Boolean(renderedPair.hasBackgroundImage),
             type: "text"
           });
         }
@@ -413,6 +415,7 @@
             tagName: "a",
             fontSize: linkStyle.fontSize,
             fontWeight: linkStyle.fontWeight,
+            hasBackgroundImage: Boolean(getRenderedPair(linkEl, parseRGBA(linkStyle.color) || { r: 0, g: 0, b: 0, a: 1 }).hasBackgroundImage),
             type: "link-contrast"
           });
         }
@@ -455,6 +458,7 @@
         fontSize: "24px",
         // Assume large for graphical objects in WCAG 2.1 mapping
         fontWeight: "400",
+        hasBackgroundImage: Boolean(renderedPair.hasBackgroundImage),
         type: "non-text"
       });
     });
@@ -490,6 +494,7 @@
                 fontSize: "24px",
                 // Map graphical to large text equivalent logic
                 fontWeight: "400",
+                hasBackgroundImage: Boolean(renderedPair.hasBackgroundImage),
                 type: "non-text"
               });
               break;
@@ -518,6 +523,7 @@
             tagName: el.tagName.toLowerCase(),
             fontSize: phStyle.fontSize || style.fontSize,
             fontWeight: phStyle.fontWeight || style.fontWeight,
+            hasBackgroundImage: Boolean(renderedPair.hasBackgroundImage),
             type: "placeholder"
           });
         }
@@ -1328,6 +1334,7 @@
         tagName: el.tagName.toLowerCase(),
         fontSize: "24px",
         fontWeight: "400",
+        hasBackgroundImage: Boolean(outerPair?.hasBackgroundImage || innerPair?.hasBackgroundImage),
         type: "focus-indicator"
       });
     }

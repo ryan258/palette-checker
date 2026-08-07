@@ -10,19 +10,10 @@
 
 /* eslint-disable no-unused-vars -- re-exports only */
 
-// Load contrast.js into its own scope by evaluating it as a module-global.
-// Because contrast.js guards its CommonJS export behind `typeof module`,
-// in a browser ES-module context `module` is undefined, so only the bare
-// function declarations land in scope. We rely on the bundler/browser
-// treating this as a simple side-effect-free script.
-//
-// However, since contrast.js uses plain `function` declarations (not
-// `export function`), we cannot directly re-export them. Instead we
-// reference the global names that contrast.js defines when loaded via
-// the <script> tag that popup.html already includes.
-//
-// The popup.html <script src="../shared/contrast.js"> MUST appear before
-// <script type="module" src="index.js"> so these globals are available.
+// Re-export contrast.js symbols as dynamic ES module function wrappers.
+// By delegating to globalThis.* at call time (rather than snapshotting globalThis
+// properties at module evaluation time), exports dynamically resolve regardless
+// of module evaluation timing.
 
 export function buildCombinationsData(...args) { return globalThis.buildCombinationsData(...args); }
 export function buildIssuesData(...args) { return globalThis.buildIssuesData(...args); }

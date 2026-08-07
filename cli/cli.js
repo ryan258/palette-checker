@@ -32,8 +32,14 @@ async function runAudit(targetUrl, options = {}) {
       );
     }
 
+    const shouldDisableSandbox =
+      options.disableSandbox ||
+      options.sandbox === false ||
+      options.noSandbox === true ||
+      process.env.NO_SANDBOX === "true";
+
     const puppeteerArgs = ["--window-size=1280,800"];
-    if (options.noSandbox || process.env.NO_SANDBOX === "true") {
+    if (shouldDisableSandbox) {
       puppeteerArgs.push("--no-sandbox", "--disable-setuid-sandbox");
     }
 
@@ -210,6 +216,8 @@ async function runFromCli(argv = process.argv) {
       "AA",
     )
     .option("-f, --format <format>", "Output format (json, text)", "text")
+    .option("--disable-sandbox", "Disable Chrome sandbox (CI environments)")
+    .option("--no-sandbox", "Disable Chrome sandbox (CI environments)")
     .parse(argv);
 
   const result = await runAudit(program.args[0], program.opts());

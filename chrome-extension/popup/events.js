@@ -184,11 +184,17 @@ splitViewToggle.addEventListener("change", (e) => {
 });
 
 githubRepoUrlInput.addEventListener("input", (e) => {
-  state.settings.githubRepoUrl = e.target.value.trim();
-  void saveSettings();
-  // Rerender so actionable fixes recalculate Github issue buttons
-  if (state.issues.length) renderIssues();
+  state.settings.githubRepoUrl = e.target.value;
 });
+
+const handleGithubRepoSave = () => {
+  state.settings.githubRepoUrl = githubRepoUrlInput.value.trim();
+  void saveSettings();
+  if (state.issues.length) renderIssues();
+};
+
+githubRepoUrlInput.addEventListener("change", handleGithubRepoSave);
+githubRepoUrlInput.addEventListener("blur", handleGithubRepoSave);
 
 historyList.addEventListener("click", async (e) => {
   const btn = e.target.closest(".btn-history-load");

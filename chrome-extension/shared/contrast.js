@@ -122,7 +122,6 @@ function getAPCAComplianceLevel(lc, fontSize, fontWeight) {
   // APCA Lookup approximations (simplified for Bronze/Silver mapping)
   // Bronze: readable, Silver: preferred
   if (absLc >= 90) return "AAA"; // Generic catch-all for very high contrast
-  if (absLc >= 75) return "AA"; // Gold standard for body text
   if (absLc >= 60) return "AA"; // Silver body text minimum (all font sizes)
 
   if (size >= 24 || (size >= 18 && weight >= 700)) {

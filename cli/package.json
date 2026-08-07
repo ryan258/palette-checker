@@ -6,6 +6,7 @@
     "chromacheck": "./cli.js"
   },
   "scripts": {
+    "prepack": "mkdir -p shared && cp ../chrome-extension/shared/contrast.js shared/contrast.js",
     "test": "node --test cli.test.js"
   },
   "keywords": [],

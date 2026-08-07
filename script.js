@@ -245,7 +245,6 @@ function getAPCAComplianceLevel(lc, fontSize, fontWeight) {
   const weight = parseInt(fontWeight, 10) || 400;
 
   if (absLc >= 90) return "AAA";
-  if (absLc >= 75) return "AA";
   if (absLc >= 60) return "AA";
   if (size >= 24 || (size >= 18 && weight >= 700)) {
     if (absLc >= 45) return "AA Large";
@@ -1239,7 +1238,11 @@ function renderDesignPreview() {
       String(sample.fontWeight),
     );
     const apcaScore = calcAPCA(primary, surface);
-    const apcaLevel = getAPCAComplianceLevel(apcaScore);
+    const apcaLevel = getAPCAComplianceLevel(
+      apcaScore,
+      sample.fontSize,
+      sample.fontWeight,
+    );
     return `
       <article class="type-tile" style="background:${surface};color:${primary};">
         <span>${sample.label}</span>
