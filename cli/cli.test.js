@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildCliIssues, isCliFailure } = require("./cli.js");
+const { buildCliIssues, isCliFailure } = require("./cli-helpers.js");
 
 const extractedPairs = [
   {

@@ -15,7 +15,7 @@ export function isVisible(el) {
   return (
     style.display !== "none" &&
     style.visibility !== "hidden" &&
-    style.opacity !== "0" &&
+    parseFloat(style.opacity) > 0 &&
     el.offsetWidth > 0 &&
     el.offsetHeight > 0
   );
@@ -47,6 +47,7 @@ export function buildRenderChain(el) {
     const style = window.getComputedStyle(current);
     chain.push({
       background: parseRGBA(style.backgroundColor),
+      hasBackgroundImage: Boolean(style.backgroundImage && style.backgroundImage !== "none"),
       opacity: parseFloat(style.opacity),
     });
     current = current.parentElement;

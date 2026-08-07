@@ -108,10 +108,10 @@ function calcAPCA(textHex, bgHex) {
   let sapc;
   if (yBg > yTxt) {
     sapc = (Math.pow(yBg, 0.56) - Math.pow(yTxt, 0.57)) * 1.14;
-    return sapc < 0.1 ? 0 : sapc * 100;
+    return sapc < 0.1 ? 0 : (sapc - 0.027) * 100;
   }
   sapc = (Math.pow(yBg, 0.65) - Math.pow(yTxt, 0.62)) * 1.14;
-  return sapc > -0.1 ? 0 : sapc * 100;
+  return sapc > -0.1 ? 0 : (sapc + 0.027) * 100;
 }
 
 function getAPCAComplianceLevel(lc, fontSize, fontWeight) {
@@ -123,12 +123,11 @@ function getAPCAComplianceLevel(lc, fontSize, fontWeight) {
   // Bronze: readable, Silver: preferred
   if (absLc >= 90) return "AAA"; // Generic catch-all for very high contrast
   if (absLc >= 75) return "AA"; // Gold standard for body text
+  if (absLc >= 60) return "AA"; // Silver body text minimum (all font sizes)
 
   if (size >= 24 || (size >= 18 && weight >= 700)) {
     if (absLc >= 45) return "AA Large"; // Silver large text
   }
-
-  if (absLc >= 60) return "AA"; // Silver body text minimum
 
   return "Fail";
 }
@@ -144,7 +143,7 @@ function getLevelRank(level) {
     case "AAA":
       return 3;
     default:
-      return 4;
+      return 0;
   }
 }
 
@@ -292,9 +291,16 @@ function suggestPassingColor(hexToChange, fixedHex, targetRatio = 4.5) {
   return lightDiff < darkDiff ? lightPassed : darkPassed;
 }
 
+const fixSuggestionCache = new Map();
+
 function getSuggestedFixes(textHex, bgHex, targetRatio = 4.5) {
   const originalText = textHex.toLowerCase();
   const originalBg = bgHex.toLowerCase();
+  const cacheKey = `${originalText}:${originalBg}:${targetRatio}`;
+  if (fixSuggestionCache.has(cacheKey)) {
+    return fixSuggestionCache.get(cacheKey);
+  }
+
   const textSuggestion = suggestPassingColor(
     originalText,
     originalBg,
@@ -351,11 +357,17 @@ function getSuggestedFixes(textHex, bgHex, targetRatio = 4.5) {
     recommended = backgroundOption;
   }
 
-  return {
+  const result = {
     text: textOption,
     background: backgroundOption,
     recommended,
   };
+  if (fixSuggestionCache.size > 500) {
+    const firstKey = fixSuggestionCache.keys().next().value;
+    fixSuggestionCache.delete(firstKey);
+  }
+  fixSuggestionCache.set(cacheKey, result);
+  return result;
 }
 
 function getAPCAMinimumRequirements(lc) {

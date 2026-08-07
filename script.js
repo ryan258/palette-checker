@@ -34,6 +34,7 @@ const state = {
   }, {}),
   apcaInformationalOnly: true,
   colorFormat: "hex",
+  colorBlindness: "none",
   imageBackground: "",
   imageSampleHex: "",
   imageSampleStatus: "",
@@ -231,18 +232,24 @@ function calcAPCA(textHex, bgHex) {
   let sapc;
   if (yBg > yTxt) {
     sapc = (Math.pow(yBg, 0.56) - Math.pow(yTxt, 0.57)) * 1.14;
-    return sapc < 0.1 ? 0 : sapc * 100;
+    return sapc < 0.1 ? 0 : (sapc - 0.027) * 100;
   }
 
   sapc = (Math.pow(yBg, 0.65) - Math.pow(yTxt, 0.62)) * 1.14;
-  return sapc > -0.1 ? 0 : sapc * 100;
+  return sapc > -0.1 ? 0 : (sapc + 0.027) * 100;
 }
 
-function getAPCAComplianceLevel(lc) {
+function getAPCAComplianceLevel(lc, fontSize, fontWeight) {
   const absLc = Math.abs(lc);
+  const size = parseFloat(fontSize) || 16;
+  const weight = parseInt(fontWeight, 10) || 400;
+
   if (absLc >= 90) return "AAA";
   if (absLc >= 75) return "AA";
-  if (absLc >= 45) return "AA Large";
+  if (absLc >= 60) return "AA";
+  if (size >= 24 || (size >= 18 && weight >= 700)) {
+    if (absLc >= 45) return "AA Large";
+  }
   return "Fail";
 }
 
@@ -545,7 +552,14 @@ function getReadableTextColor(backgroundHex, preferredHex) {
     .sort((a, b) => b.ratio - a.ratio)[0].hex;
 }
 
+const webFixCache = new Map();
+
 function findNearestPassingColor(originalHex, fixedHex, targetRatio, target) {
+  const cacheKey = `${originalHex}:${fixedHex}:${targetRatio}:${target}`;
+  if (webFixCache.has(cacheKey)) {
+    return webFixCache.get(cacheKey);
+  }
+
   const hsl = hexToHsl(originalHex);
   if (!hsl) return null;
 
@@ -563,6 +577,11 @@ function findNearestPassingColor(originalHex, fixedHex, targetRatio, target) {
     }
   }
 
+  if (webFixCache.size > 500) {
+    const firstKey = webFixCache.keys().next().value;
+    webFixCache.delete(firstKey);
+  }
+  webFixCache.set(cacheKey, best);
   return best;
 }
 
@@ -650,6 +669,7 @@ function serializeState() {
     activeFilters: state.activeFilters,
     apcaInformationalOnly: state.apcaInformationalOnly,
     colorFormat: state.colorFormat,
+    colorBlindness: state.colorBlindness,
     imageBackground: state.imageBackground,
     imageSampleHex: state.imageSampleHex,
     imageSampleStatus: state.imageSampleStatus,
@@ -702,6 +722,16 @@ function loadPersistedState() {
   }
   if (["hex", "rgb", "hsl", "oklch"].includes(saved.colorFormat)) {
     state.colorFormat = saved.colorFormat;
+  }
+  if (saved.colorBlindness && typeof saved.colorBlindness === "string") {
+    state.colorBlindness = saved.colorBlindness;
+    if (colorBlindnessSelect) {
+      colorBlindnessSelect.value = state.colorBlindness;
+      combinationsGrid.className = "combinations-grid";
+      if (state.colorBlindness !== "none") {
+        combinationsGrid.classList.add(`filter-${state.colorBlindness}`);
+      }
+    }
   }
   state.apcaInformationalOnly = saved.apcaInformationalOnly !== false;
   state.imageBackground = normalizeImageUrl(saved.imageBackground || "");
@@ -942,6 +972,7 @@ function getColorById(id) {
 }
 
 function renderHarmonyBaseOptions() {
+  const previousValue = harmonyBaseSelect.value;
   harmonyBaseSelect.innerHTML = "";
   const fragment = document.createDocumentFragment();
   state.colors.forEach((color, index) => {
@@ -951,6 +982,9 @@ function renderHarmonyBaseOptions() {
     fragment.appendChild(option);
   });
   harmonyBaseSelect.appendChild(fragment);
+  if (previousValue && state.colors.some((color) => color.id === previousValue)) {
+    harmonyBaseSelect.value = previousValue;
+  }
 }
 
 function renderColorInputs() {
@@ -1126,9 +1160,14 @@ async function copyText(text, message) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
   } else {
-    exportOutput.value = text;
-    exportOutput.select();
-    document.execCommand("copy");
+    const originalValue = exportOutput.value;
+    try {
+      exportOutput.value = text;
+      exportOutput.select();
+      document.execCommand("copy");
+    } finally {
+      exportOutput.value = originalValue;
+    }
   }
   setStatus(message, "success");
 }
@@ -1271,41 +1310,48 @@ function renderImagePreview() {
 
 function sampleImage(url) {
   return new Promise((resolve) => {
-    const image = new Image();
-    image.crossOrigin = "anonymous";
-    image.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        const size = 48;
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(image, 0, 0, size, size);
-        const data = ctx.getImageData(0, 0, size, size).data;
-        let r = 0;
-        let g = 0;
-        let b = 0;
-        for (let i = 0; i < data.length; i += 4) {
-          r += data[i];
-          g += data[i + 1];
-          b += data[i + 2];
+    const tryLoad = (useCORS) => {
+      const image = new Image();
+      if (useCORS) image.crossOrigin = "anonymous";
+      image.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const size = 48;
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(image, 0, 0, size, size);
+          const data = ctx.getImageData(0, 0, size, size).data;
+          let r = 0;
+          let g = 0;
+          let b = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            r += data[i];
+            g += data[i + 1];
+            b += data[i + 2];
+          }
+          const count = data.length / 4;
+          resolve({
+            hex: rgbToHex(r / count, g / count, b / count),
+            status: "Average image background sampled.",
+          });
+        } catch {
+          resolve({
+            hex: "",
+            status: "Image loaded. Sampling is blocked for this source.",
+          });
         }
-        const count = data.length / 4;
-        resolve({
-          hex: rgbToHex(r / count, g / count, b / count),
-          status: "Average image background sampled.",
-        });
-      } catch {
-        resolve({
-          hex: "",
-          status: "Image loaded. Sampling is blocked for this source.",
-        });
-      }
+      };
+      image.onerror = () => {
+        if (useCORS) {
+          tryLoad(false);
+        } else {
+          resolve({ hex: "", status: "Image could not be loaded." });
+        }
+      };
+      image.src = url;
     };
-    image.onerror = () => {
-      resolve({ hex: "", status: "Image could not be loaded." });
-    };
-    image.src = url;
+    tryLoad(true);
   });
 }
 
@@ -1567,6 +1613,8 @@ function bindEvents() {
 
   colorBlindnessSelect.addEventListener("change", (event) => {
     const filterValue = event.target.value;
+    state.colorBlindness = filterValue;
+    saveState();
     combinationsGrid.className = "combinations-grid";
 
     if (filterValue !== "none") {

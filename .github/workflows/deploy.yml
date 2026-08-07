@@ -37,6 +37,10 @@ jobs:
         run: |
           node --test chrome-extension/tests/contrast.test.js
           node --test chrome-extension/tests/browser-behavior.test.js
+      - name: Verify bundle freshness
+        run: |
+          ./chrome-extension/build.sh
+          git diff --exit-code chrome-extension/content/content.js
       - name: CLI tests
         run: npm test --prefix cli
       - name: Figma plugin tests
@@ -51,12 +55,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Stage web app assets
+        run: |
+          mkdir _site
+          cp index.html script.js styles.css _site/
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "."
+          path: "./_site"
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

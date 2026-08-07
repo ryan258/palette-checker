@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  calcAPCA,
   getAPCAComplianceLevel,
   getAPCAPolarity,
   getAPCARecommendationDetails,
@@ -13,6 +14,16 @@ const {
   buildIssuesData,
   shouldAnalyzePair,
 } = require("../shared/contrast.js");
+
+test("calculates APCA Lc score accurately with low-contrast offset", () => {
+  const lc1 = calcAPCA("#002dcc", "#ffffff");
+  assert.equal(lc1.toFixed(2), "89.85");
+  assert.equal(getAPCAComplianceLevel(lc1, "16px", "400"), "AA");
+
+  const lc2 = calcAPCA("#004699", "#ffffff");
+  assert.equal(lc2.toFixed(2), "89.86");
+  assert.equal(getAPCAComplianceLevel(lc2, "16px", "400"), "AA");
+});
 
 test("normalizes unknown standards to WCAG21", () => {
   assert.equal(normalizeStandard("something-else"), "WCAG21");

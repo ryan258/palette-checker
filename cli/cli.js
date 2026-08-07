@@ -1,53 +1,20 @@
 #!/usr/bin/env node
 
-const puppeteer = require("puppeteer");
 const { program } = require("commander");
 const chalk = require("chalk");
 const fs = require("fs");
 const path = require("path");
 const {
-  buildIssuesData,
-  getLevelRank,
   normalizeStandard,
 } = require("../chrome-extension/shared/contrast.js");
-
-function getRequiredAPCALevel(threshold) {
-  switch (String(threshold || "").toUpperCase()) {
-    case "AAA":
-      return "AAA";
-    case "BRONZE":
-    case "AA LARGE":
-      return "AA Large";
-    case "SILVER":
-    case "AA":
-    default:
-      return "AA";
-  }
-}
-
-function buildCliIssues(pairs, standard) {
-  return buildIssuesData(pairs, {
-    standard: normalizeStandard(String(standard || "").toUpperCase()),
-    cvdMode: "none",
-  });
-}
-
-function isCliFailure(issue, { standard, threshold }) {
-  const activeStandard = normalizeStandard(String(standard || "").toUpperCase());
-
-  if (activeStandard === "APCA") {
-    const requiredLevel = getRequiredAPCALevel(threshold);
-    return getLevelRank(issue.apcaLevel) < getLevelRank(requiredLevel);
-  }
-
-  if (String(threshold || "").toUpperCase() === "AAA") {
-    return issue.wcagLevel !== "AAA";
-  }
-
-  return issue.wcagLevel.includes("Fail");
-}
+const {
+  getRequiredAPCALevel,
+  buildCliIssues,
+  isCliFailure,
+} = require("./cli-helpers.js");
 
 async function runAudit(targetUrl, options = {}) {
+  const puppeteer = require("puppeteer");
   let browser;
   const activeStandard = normalizeStandard(
     String(options.standard || "WCAG21").toUpperCase(),
@@ -65,13 +32,14 @@ async function runAudit(targetUrl, options = {}) {
       );
     }
 
+    const puppeteerArgs = ["--window-size=1280,800"];
+    if (options.noSandbox || process.env.NO_SANDBOX === "true") {
+      puppeteerArgs.push("--no-sandbox", "--disable-setuid-sandbox");
+    }
+
     browser = await puppeteer.launch({
-      headless: "new",
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--window-size=1280,800",
-      ],
+      headless: true,
+      args: puppeteerArgs,
     });
 
     const page = await browser.newPage();
