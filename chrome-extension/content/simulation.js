@@ -3,14 +3,40 @@ import { PREVIEW_TARGET_ATTR, resolveTrackedElement } from './extraction.js';
 
 
 export let activeHighlight = null;
+export let activeHighlightState = null;
 export let highlightTimer = null;
 export let previewFixState = null;
+let originalDocFilter = null;
+let originalDocFilterPriority = null;
+let docFilterCaptured = false;
 
 export function clearHighlight() {
   if (!activeHighlight) return;
-  activeHighlight.style.removeProperty("outline");
-  activeHighlight.style.removeProperty("outline-offset");
+  if (activeHighlightState) {
+    if (activeHighlightState.outline) {
+      activeHighlight.style.setProperty(
+        "outline",
+        activeHighlightState.outline,
+        activeHighlightState.outlinePriority,
+      );
+    } else {
+      activeHighlight.style.removeProperty("outline");
+    }
+    if (activeHighlightState.outlineOffset) {
+      activeHighlight.style.setProperty(
+        "outline-offset",
+        activeHighlightState.outlineOffset,
+        activeHighlightState.outlineOffsetPriority,
+      );
+    } else {
+      activeHighlight.style.removeProperty("outline-offset");
+    }
+  } else {
+    activeHighlight.style.removeProperty("outline");
+    activeHighlight.style.removeProperty("outline-offset");
+  }
   activeHighlight = null;
+  activeHighlightState = null;
 }
 export function clearPreviewFix() {
   if (!previewFixState) return;
@@ -73,6 +99,13 @@ export function highlightElement(id) {
   const el = resolveTrackedElement(id);
   if (!el) return false;
 
+  activeHighlightState = {
+    outline: el.style.getPropertyValue("outline") || "",
+    outlinePriority: el.style.getPropertyPriority("outline") || "",
+    outlineOffset: el.style.getPropertyValue("outline-offset") || "",
+    outlineOffsetPriority: el.style.getPropertyPriority("outline-offset") || "",
+  };
+
   el.scrollIntoView({ behavior: "smooth", block: "center" });
   el.style.outline = "3px solid #38bdf8";
   el.style.outlineOffset = "3px";
@@ -80,14 +113,13 @@ export function highlightElement(id) {
 
   highlightTimer = setTimeout(() => {
     if (activeHighlight === el) {
-      el.style.removeProperty("outline");
-      el.style.removeProperty("outline-offset");
-      activeHighlight = null;
+      clearHighlight();
     }
   }, 3000);
 
   return true;
 }
+
 export const IS_MAC = /Macintosh|Mac OS/.test(navigator.userAgent);
 export const SHORTCUT_PREFIX = IS_MAC ? "\u2325\u21E7" : "Alt+Shift+";
 export const CVD_OPTIONS = [
@@ -328,9 +360,11 @@ export function ensureCvdToolbar() {
 
   // Minimized pip to restore the toolbar
   if (!cvdPip) {
-    cvdPip = document.createElement("div");
+    cvdPip = document.createElement("button");
+    cvdPip.type = "button";
     cvdPip.id = "chromacheck-cvd-pip";
     cvdPip.title = "Show CVD simulation toolbar";
+    cvdPip.setAttribute("aria-label", "Show CVD simulation toolbar");
     cvdPip.textContent = "\uD83D\uDC41";
     cvdPip.addEventListener("click", () => {
       cvdToolbar?.classList.remove("chromacheck-collapsed");
@@ -466,16 +500,45 @@ export function applyVisionPresentation(shouldBroadcast = false) {
     (visionState.lowVisionMode && visionState.lowVisionMode !== "none");
   const combinedFilter = getCombinedVisionFilter();
 
+  if (hasSimulation && !docFilterCaptured) {
+    originalDocFilter =
+      document.documentElement.style.getPropertyValue("filter") || "";
+    originalDocFilterPriority =
+      document.documentElement.style.getPropertyPriority("filter") || "";
+    docFilterCaptured = true;
+  }
+
   removeFullPageMask();
 
   if (!hasSimulation) {
-    document.documentElement.style.filter = "";
+    if (docFilterCaptured) {
+      if (originalDocFilter) {
+        document.documentElement.style.setProperty(
+          "filter",
+          originalDocFilter,
+          originalDocFilterPriority,
+        );
+      } else {
+        document.documentElement.style.removeProperty("filter");
+      }
+      docFilterCaptured = false;
+      originalDocFilter = null;
+      originalDocFilterPriority = null;
+    }
     destroySplitView();
     destroyCvdToolbar();
   } else if (visionState.splitView) {
     ensureCvdToolbar();
     syncCvdToolbar();
-    document.documentElement.style.filter = "";
+    if (originalDocFilter) {
+      document.documentElement.style.setProperty(
+        "filter",
+        originalDocFilter,
+        originalDocFilterPriority,
+      );
+    } else {
+      document.documentElement.style.removeProperty("filter");
+    }
     ensureSplitView();
     splitIframe.style.filter = combinedFilter;
     splitOverlay.querySelector("#chromacheck-chip-simulated").textContent =

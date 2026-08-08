@@ -6,13 +6,21 @@
 set -e
 
 echo "Bundling extension..."
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ESBUILD_BIN="$SCRIPT_DIR/../cli/node_modules/.bin/esbuild"
 
-# Use npx to run esbuild, installing it temporarily if needed.
+if [[ ! -x "$ESBUILD_BIN" ]]; then
+  echo "Missing pinned esbuild. Run: npm install --prefix \"$SCRIPT_DIR/../cli\"" >&2
+  exit 1
+fi
+
+cd "$SCRIPT_DIR"
+
+# Use the exact esbuild version pinned by cli/package-lock.json.
 # --bundle: bundle all dependencies
 # --format=iife: output as Immediately Invoked Function Expression for browser
 # --target=es2022: modern syntax
 
-npx --yes esbuild content/index.js --bundle --format=iife --outfile=content/content.js
+"$ESBUILD_BIN" content/index.js --bundle --format=iife --outfile=content/content.js
 
 echo "Build complete."

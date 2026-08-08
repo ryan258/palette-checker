@@ -223,6 +223,8 @@ export function applyThemeCandidate(candidate) {
     attrValue: candidate.kind === "attr" ? target.getAttribute(candidate.key) : null,
     styleValue:
       candidate.kind === "style" ? target.style.getPropertyValue(candidate.key) : "",
+    stylePriority:
+      candidate.kind === "style" ? target.style.getPropertyPriority(candidate.key) : "",
   };
 
   if (candidate.kind === "class") {
@@ -245,7 +247,7 @@ export function applyThemeCandidate(candidate) {
       }
     } else if (candidate.kind === "style") {
       if (previous.styleValue) {
-        target.style.setProperty(candidate.key, previous.styleValue);
+        target.style.setProperty(candidate.key, previous.styleValue, previous.stylePriority);
       } else {
         target.style.removeProperty(candidate.key);
       }
@@ -270,16 +272,19 @@ export async function auditThemes() {
 
   for (const candidate of candidates.slice(0, 6)) {
     const restore = applyThemeCandidate(candidate);
-    await nextFrame();
-    variants.push({
-      label: candidate.label,
-      mode: candidate.mode,
-      note: candidate.note,
-      palette: extractColors(),
-      pairs: extractElementPairs(),
-    });
-    restore();
-    await nextFrame();
+    try {
+      await nextFrame();
+      variants.push({
+        label: candidate.label,
+        mode: candidate.mode,
+        note: candidate.note,
+        palette: extractColors(),
+        pairs: extractElementPairs(),
+      });
+    } finally {
+      restore();
+      await nextFrame();
+    }
   }
 
   return { variants, notes };

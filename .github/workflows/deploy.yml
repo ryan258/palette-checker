@@ -3,6 +3,8 @@ name: Deploy static content to Pages
 on:
   push:
     branches: ["main"]
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -30,14 +32,12 @@ jobs:
         run: npm ci --prefix cli
       - name: Syntax check
         run: |
-          for file in $(find . -name '*.js' -not -path './cli/node_modules/*' -not -path './.git/*'); do
+          while IFS= read -r -d '' file; do
             node --check "$file"
-          done
+          done < <(find . -name '*.js' -not -path './cli/node_modules/*' -not -path './.git/*' -not -path './chrome-extension/shared/contrast.esm.js' -print0)
+          node --input-type=module --check < chrome-extension/shared/contrast.esm.js
       - name: Extension tests
-        run: |
-          node --test chrome-extension/tests/contrast.test.js
-          node --test chrome-extension/tests/parity.test.js
-          node --test chrome-extension/tests/browser-behavior.test.js
+        run: node --test chrome-extension/tests/*.test.js
       - name: Verify bundle freshness
         run: |
           ./chrome-extension/build.sh
@@ -48,6 +48,7 @@ jobs:
         run: node --test figma-plugin/code.test.js
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: test
     environment:
       name: github-pages

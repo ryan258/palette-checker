@@ -1,4 +1,7 @@
 .gitnexus
 .claude
 cli/node_modules
+cli/shared
+cli/content
+cli/outputs
 .DS_Store

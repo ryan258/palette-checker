@@ -1,3 +1,4 @@
+"use strict";
 (() => {
   // content/color-utils.js
   function rgbToHex(rgbStr) {
@@ -675,13 +676,39 @@
 
   // content/simulation.js
   var activeHighlight = null;
+  var activeHighlightState = null;
   var highlightTimer = null;
   var previewFixState = null;
+  var originalDocFilter = null;
+  var originalDocFilterPriority = null;
+  var docFilterCaptured = false;
   function clearHighlight() {
     if (!activeHighlight) return;
-    activeHighlight.style.removeProperty("outline");
-    activeHighlight.style.removeProperty("outline-offset");
+    if (activeHighlightState) {
+      if (activeHighlightState.outline) {
+        activeHighlight.style.setProperty(
+          "outline",
+          activeHighlightState.outline,
+          activeHighlightState.outlinePriority
+        );
+      } else {
+        activeHighlight.style.removeProperty("outline");
+      }
+      if (activeHighlightState.outlineOffset) {
+        activeHighlight.style.setProperty(
+          "outline-offset",
+          activeHighlightState.outlineOffset,
+          activeHighlightState.outlineOffsetPriority
+        );
+      } else {
+        activeHighlight.style.removeProperty("outline-offset");
+      }
+    } else {
+      activeHighlight.style.removeProperty("outline");
+      activeHighlight.style.removeProperty("outline-offset");
+    }
     activeHighlight = null;
+    activeHighlightState = null;
   }
   function clearPreviewFix() {
     if (!previewFixState) return;
@@ -730,15 +757,19 @@
     if (highlightTimer) clearTimeout(highlightTimer);
     const el = resolveTrackedElement(id);
     if (!el) return false;
+    activeHighlightState = {
+      outline: el.style.getPropertyValue("outline") || "",
+      outlinePriority: el.style.getPropertyPriority("outline") || "",
+      outlineOffset: el.style.getPropertyValue("outline-offset") || "",
+      outlineOffsetPriority: el.style.getPropertyPriority("outline-offset") || ""
+    };
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     el.style.outline = "3px solid #38bdf8";
     el.style.outlineOffset = "3px";
     activeHighlight = el;
     highlightTimer = setTimeout(() => {
       if (activeHighlight === el) {
-        el.style.removeProperty("outline");
-        el.style.removeProperty("outline-offset");
-        activeHighlight = null;
+        clearHighlight();
       }
     }, 3e3);
     return true;
@@ -977,9 +1008,11 @@
     });
     document.body.appendChild(cvdToolbar);
     if (!cvdPip) {
-      cvdPip = document.createElement("div");
+      cvdPip = document.createElement("button");
+      cvdPip.type = "button";
       cvdPip.id = "chromacheck-cvd-pip";
       cvdPip.title = "Show CVD simulation toolbar";
+      cvdPip.setAttribute("aria-label", "Show CVD simulation toolbar");
       cvdPip.textContent = "\u{1F441}";
       cvdPip.addEventListener("click", () => {
         cvdToolbar?.classList.remove("chromacheck-collapsed");
@@ -1105,15 +1138,41 @@
   function applyVisionPresentation(shouldBroadcast = false) {
     const hasSimulation = visionState.cvdMode && visionState.cvdMode !== "none" || visionState.lowVisionMode && visionState.lowVisionMode !== "none";
     const combinedFilter = getCombinedVisionFilter();
+    if (hasSimulation && !docFilterCaptured) {
+      originalDocFilter = document.documentElement.style.getPropertyValue("filter") || "";
+      originalDocFilterPriority = document.documentElement.style.getPropertyPriority("filter") || "";
+      docFilterCaptured = true;
+    }
     removeFullPageMask();
     if (!hasSimulation) {
-      document.documentElement.style.filter = "";
+      if (docFilterCaptured) {
+        if (originalDocFilter) {
+          document.documentElement.style.setProperty(
+            "filter",
+            originalDocFilter,
+            originalDocFilterPriority
+          );
+        } else {
+          document.documentElement.style.removeProperty("filter");
+        }
+        docFilterCaptured = false;
+        originalDocFilter = null;
+        originalDocFilterPriority = null;
+      }
       destroySplitView();
       destroyCvdToolbar();
     } else if (visionState.splitView) {
       ensureCvdToolbar();
       syncCvdToolbar();
-      document.documentElement.style.filter = "";
+      if (originalDocFilter) {
+        document.documentElement.style.setProperty(
+          "filter",
+          originalDocFilter,
+          originalDocFilterPriority
+        );
+      } else {
+        document.documentElement.style.removeProperty("filter");
+      }
       ensureSplitView();
       splitIframe.style.filter = combinedFilter;
       splitOverlay.querySelector("#chromacheck-chip-simulated").textContent = getVisionLabel();
@@ -1562,7 +1621,8 @@
     const previous = {
       className: target.className,
       attrValue: candidate.kind === "attr" ? target.getAttribute(candidate.key) : null,
-      styleValue: candidate.kind === "style" ? target.style.getPropertyValue(candidate.key) : ""
+      styleValue: candidate.kind === "style" ? target.style.getPropertyValue(candidate.key) : "",
+      stylePriority: candidate.kind === "style" ? target.style.getPropertyPriority(candidate.key) : ""
     };
     if (candidate.kind === "class") {
       target.classList.remove("dark", "light");
@@ -1583,7 +1643,7 @@
         }
       } else if (candidate.kind === "style") {
         if (previous.styleValue) {
-          target.style.setProperty(candidate.key, previous.styleValue);
+          target.style.setProperty(candidate.key, previous.styleValue, previous.stylePriority);
         } else {
           target.style.removeProperty(candidate.key);
         }
@@ -1606,16 +1666,19 @@
     ];
     for (const candidate of candidates.slice(0, 6)) {
       const restore = applyThemeCandidate(candidate);
-      await nextFrame();
-      variants.push({
-        label: candidate.label,
-        mode: candidate.mode,
-        note: candidate.note,
-        palette: extractColors(),
-        pairs: extractElementPairs()
-      });
-      restore();
-      await nextFrame();
+      try {
+        await nextFrame();
+        variants.push({
+          label: candidate.label,
+          mode: candidate.mode,
+          note: candidate.note,
+          palette: extractColors(),
+          pairs: extractElementPairs()
+        });
+      } finally {
+        restore();
+        await nextFrame();
+      }
     }
     return { variants, notes };
   }

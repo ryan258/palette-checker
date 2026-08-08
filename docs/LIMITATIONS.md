@@ -74,13 +74,12 @@ ratio itself is usually still correct.
 and none are modeled. Text made legible by a shadow will be reported as failing; text made
 *illegible* by a blend mode may be reported as passing.
 
-### Cross-origin iframes
+### Iframes
 
-Same-origin iframes are traversed. Cross-origin iframes cannot be, by browser security
-design. Embedded content — payment forms, video players, third-party widgets — is invisible
-to the scan.
+Same-origin and cross-origin iframes are currently not traversed by the content script.
+Embedded content — payment forms, video players, third-party widgets, and same-origin frame documents — is invisible to top-frame scans.
 
-**Workaround.** Scan the embedded content at its own origin, separately.
+**Workaround.** Open and scan the iframe content directly at its own page URL.
 
 ### Canvas, WebGL, and video
 
@@ -134,10 +133,12 @@ reliably distinguish.
 
 ### Focus indicator audit
 
-Measures focus *contrast* against WCAG 2.2 SC 2.4.11's 3:1 requirement. The full focus
-appearance criteria — minimum indicator area (SC 2.4.11), and focus not obscured
-(SC 2.4.12/2.4.13) — are **not** implemented. A passing focus audit does not mean full
-WCAG 2.2 focus conformance.
+Detects missing author-supplied focus styling and measures the indicator against adjacent
+colors using a 3:1 threshold. It supports review of SC 2.4.7 (Focus Visible) and SC 1.4.11
+(Non-text Contrast), but it is not a complete conformance test. The audit does **not**
+measure whether the focused component is obscured (SC 2.4.11 at AA or SC 2.4.12 at AAA),
+nor does it implement SC 2.4.13 Focus Appearance at AAA, which includes minimum indicator
+area and focused-to-unfocused contrast requirements.
 
 The audit also moves focus through the page as it runs, which can trigger scroll jumps,
 open dropdowns, or fire analytics events on some sites.
@@ -149,10 +150,10 @@ scanned manually, one at a time. It will not discover pages on its own.
 
 ### Target size (WCAG 2.2)
 
-Measures the bounding box against the 24×24 CSS pixel minimum. The spec's exemptions —
-inline links in text, elements with sufficient spacing, and cases where the size is
-essential or legally required — are only partially implemented. Inline text links are
-excluded; the others are not. Expect some false positives.
+Measures the bounding box against the 24×24 CSS pixel minimum. The criterion's exceptions —
+sufficient spacing, equivalent controls, inline targets, user-agent-controlled sizing, and
+essential presentation — are only partially implemented. Inline text links are excluded;
+the others require manual confirmation. Expect some false positives.
 
 ---
 
@@ -161,13 +162,15 @@ excluded; the others are not. Expect some false positives.
 | Limit | Value | Consequence |
 |-------|-------|-------------|
 | Web app palette | 2–9 colors | Up to 72 directional pairs |
-| Issues per scan | 500 | Additional findings are dropped after sorting worst-first |
+| Extension issues per scan | 500 | Additional findings are dropped from the interactive list after sorting worst-first |
 | Scan history per page | 10 | Oldest scans evicted |
 | Pages retained in history | 15 | Least-recently-scanned pages evicted |
 | Domain comparison | 8 pages | Only the 8 most recent scans on that host |
 
-The 500-issue cap matters most. On a very large page you are seeing the 500 worst findings,
-not all of them — fix and re-scan to reveal what was truncated.
+The 500-issue cap applies to the extension's interactive view and saved extension history.
+On a very large page you are seeing the 500 worst findings there, not all of them — fix and
+re-scan to reveal what was truncated. CLI JSON and Markdown reports are deliberately
+uncapped so automation and downstream tools retain the full evidence set.
 
 Very large DOMs (10,000+ elements) make scans slow, because every element requires a
 `getComputedStyle` call. Extremely large pages may take several seconds.

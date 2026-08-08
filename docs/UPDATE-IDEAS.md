@@ -195,7 +195,7 @@ ignore mechanism is the difference between a gate teams keep and one they delete
 
 ## Tier 3 — Deeper WCAG coverage (own the color niche completely)
 
-### 3.1 Complete WCAG 2.2 focus appearance (SC 2.4.11 / 2.4.12 / 2.4.13)
+### 3.1 Complete WCAG 2.2 keyboard-focus coverage (SC 2.4.11 / 2.4.12 / 2.4.13)
 
 **Problem:** Focus indicator contrast is checked; area/obscurement are not, and the
 roadmap already flags this as an over-claim.

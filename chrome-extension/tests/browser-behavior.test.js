@@ -20,6 +20,7 @@ const mimeTypes = {
   ".css": "text/css",
   ".html": "text/html",
   ".js": "text/javascript",
+  ".mjs": "text/javascript",
 };
 
 const popupElementIds = [
@@ -299,6 +300,7 @@ function createFocusActionHarness() {
         ${popupElementIds.map((id) => `<div id="${escapeHtml(id)}"></div>`).join("\n")}
         <script>
           window.Worker = undefined;
+          window.__focusStorage = {};
           window.chrome = {
             tabs: {
               query: async () => [{ id: 7, url: "https://example.test", title: "Example" }],
@@ -312,9 +314,16 @@ function createFocusActionHarness() {
             },
             storage: {
               local: {
-                get: async () => ({}),
-                set: async () => {},
-                remove: async () => {},
+                get: async (keys) => {
+                  const requested = Array.isArray(keys) ? keys : [keys];
+                  return Object.fromEntries(
+                    requested
+                      .filter((key) => Object.hasOwn(window.__focusStorage, key))
+                      .map((key) => [key, window.__focusStorage[key]]),
+                  );
+                },
+                set: async (values) => Object.assign(window.__focusStorage, values),
+                remove: async (key) => { delete window.__focusStorage[key]; },
               },
             },
           };
@@ -331,6 +340,7 @@ function createFocusActionHarness() {
               domain: "example.test",
               supported: true,
             };
+            state.settings.standard = "WCAG22";
             state.palette = [{ hex: "#000000", count: 1 }, { hex: "#ffffff", count: 1 }];
             state.colors = ["#000000", "#ffffff"];
             state.elementPairs = [
@@ -369,7 +379,126 @@ function createFocusActionHarness() {
             return {
               focusPairCount: state.focusPairs.length,
               issueTypes: state.issues.map((issue) => issue.type),
+              storedIssueTypes:
+                window.__focusStorage.chromacheckAnalysisByUrl?.[
+                  "https://example.test"
+                ]?.[0]?.issues?.map((issue) => issue.type) || [],
               statusText: document.getElementById("status-banner").textContent,
+            };
+          };
+        </script>
+      </body>
+    </html>`;
+}
+
+function createScanContextHarness() {
+  return `<!doctype html>
+    <html lang="en">
+      <head><meta charset="utf-8"><title>Scan context harness</title></head>
+      <body>
+        ${popupElementIds.map((id) => `<div id="${escapeHtml(id)}"></div>`).join("\n")}
+        <script>
+          window.Worker = undefined;
+          window.__activeTab = {
+            id: 7,
+            url: "https://first.example/page",
+            title: "First page",
+          };
+          window.__messageTabIds = [];
+          window.__storageWrites = 0;
+          window.chrome = {
+            tabs: {
+              query: async () => [window.__activeTab],
+              sendMessage: async (tabId, message) => {
+                window.__messageTabIds.push(tabId);
+                if (message.action === "getPageContext") {
+                  return {
+                    url: window.__activeTab.url,
+                    title: window.__activeTab.title,
+                  };
+                }
+                if (message.action === "extractColors") {
+                  return {
+                    colors: [
+                      { hex: "#000000", count: 1 },
+                      { hex: "#ffffff", count: 1 },
+                    ],
+                  };
+                }
+                if (message.action === "extractElementPairs") {
+                  return new Promise((resolve) => {
+                    window.__releaseElementPairs = () => resolve({
+                      pairs: [{
+                        id: "first-page-text",
+                        type: "text",
+                        selector: "p",
+                        tagName: "p",
+                        fontSize: "16px",
+                        fontWeight: "400",
+                        textColor: "#777777",
+                        bgColor: "#ffffff",
+                      }],
+                    });
+                  });
+                }
+                return { ok: true };
+              },
+            },
+            storage: {
+              local: {
+                get: async () => ({}),
+                set: async () => { window.__storageWrites += 1; },
+                remove: async () => {},
+              },
+            },
+          };
+        </script>
+        <script src="/chrome-extension/shared/contrast.js"></script>
+        <script type="module">
+          import { state } from "/chrome-extension/popup/state.js";
+          import { handleExtract } from "/chrome-extension/popup/actions.js";
+
+          window.runScanContextCheck = async () => {
+            state.pageContext = {
+              title: "First page",
+              url: "https://first.example/page",
+              domain: "first.example",
+              supported: true,
+            };
+            state.settings.standard = "WCAG21";
+            state.palette = [{ hex: "#111111", count: 1 }];
+            state.colors = ["#111111"];
+            state.issues = [];
+
+            const scanPromise = handleExtract();
+            while (typeof window.__releaseElementPairs !== "function") {
+              await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+
+            window.__activeTab = {
+              id: 8,
+              url: "https://second.example/page",
+              title: "Second page",
+            };
+            state.pageContext = {
+              title: "Second page",
+              url: "https://second.example/page",
+              domain: "second.example",
+              supported: true,
+            };
+            state.palette = [{ hex: "#abcdef", count: 99 }];
+            state.colors = ["#abcdef"];
+            state.issues = [{ id: "second-page-sentinel", type: "text" }];
+
+            window.__releaseElementPairs();
+            await scanPromise;
+
+            return {
+              messageTabIds: window.__messageTabIds,
+              storageWrites: window.__storageWrites,
+              pageUrl: state.pageContext.url,
+              palette: state.palette,
+              issueIds: state.issues.map((entry) => entry.id),
             };
           };
         </script>
@@ -512,10 +641,29 @@ test(
 
     assert.equal(result.focusPairCount, 0);
     assert.deepEqual(result.issueTypes, ["text"]);
+    assert.deepEqual(result.storedIssueTypes, ["text"]);
     assert.equal(
       result.statusText,
       "No focus indicators were detected on the current page.",
     );
+  },
+);
+
+test(
+  "page scans stay bound to one tab and discard results after a tab switch",
+  { skip: puppeteerSkip },
+  async () => {
+    const result = await withBrowser(
+      { "/scan-context.html": createScanContextHarness() },
+      "/scan-context.html",
+      (page) => page.evaluate(() => window.runScanContextCheck()),
+    );
+
+    assert.deepEqual(result.messageTabIds, [7, 7, 7]);
+    assert.equal(result.storageWrites, 0);
+    assert.equal(result.pageUrl, "https://second.example/page");
+    assert.deepEqual(result.palette, [{ hex: "#abcdef", count: 99 }]);
+    assert.deepEqual(result.issueIds, ["second-page-sentinel"]);
   },
 );
 

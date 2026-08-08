@@ -4,23 +4,98 @@ const { program } = require("commander");
 const chalk = require("chalk");
 const fs = require("fs");
 const path = require("path");
+const contrastPath = fs.existsSync(
+  path.join(__dirname, "../chrome-extension/shared/contrast.js"),
+)
+  ? path.join(__dirname, "../chrome-extension/shared/contrast.js")
+  : path.join(__dirname, "./shared/contrast.js");
+
 const {
   normalizeStandard,
-} = require("../chrome-extension/shared/contrast.js");
+} = require(contrastPath);
 const {
   getRequiredAPCALevel,
   buildCliIssues,
+  isValidThresholdForStandard,
   isCliFailure,
 } = require("./cli-helpers.js");
+const { renderActionableMarkdownReport } = require("./report.js");
+
+function buildPageAuditRunnerSource(contentCode) {
+  return `
+    ${contentCode}
+
+    window.chrome = {
+      runtime: {
+        onMessage: { addListener: () => {} },
+        sendMessage: () => Promise.resolve({ ok: true })
+      }
+    };
+
+    const core = chromacheckInit();
+    const pairs = core.extractElementPairs() || [];
+    const colors = core.extractColors() || [];
+
+    const runAsyncAudit = async () => {
+      let focusPairs = [];
+      if (isWcag22) {
+        if (typeof core.auditFocusIndicators !== "function") {
+          throw new Error(
+            "Focus audit requested (WCAG 2.2) but auditFocusIndicators is missing from content bundle",
+          );
+        }
+        focusPairs = await core.auditFocusIndicators();
+      }
+      return {
+        colors,
+        pairs: [...pairs, ...(focusPairs || [])],
+      };
+    };
+
+    return runAsyncAudit();
+  `;
+}
 
 async function runAudit(targetUrl, options = {}) {
   const puppeteer = require("puppeteer");
   let browser;
-  const activeStandard = normalizeStandard(
-    String(options.standard || "WCAG21").toUpperCase(),
-  );
-  const threshold = options.threshold || "AA";
-  const format = options.format || "text";
+
+  const validStandards = ["WCAG21", "WCAG22", "APCA"];
+  const validFormats = ["json", "markdown", "text"];
+
+  const rawStandard = String(options.standard || "WCAG21").toUpperCase();
+  if (!validStandards.includes(rawStandard)) {
+    console.error(chalk.red(`Invalid --standard option: "${options.standard}". Supported options: ${validStandards.join(", ")}`));
+    return { exitCode: 1, error: new Error(`Invalid standard: ${options.standard}`) };
+  }
+
+  const rawThreshold = String(options.threshold || "AA").toUpperCase();
+  if (!isValidThresholdForStandard(rawStandard, rawThreshold)) {
+    const validThresholds =
+      rawStandard === "APCA"
+        ? ["AA", "AAA", "BRONZE", "SILVER"]
+        : ["AA", "AAA"];
+    console.error(chalk.red(`Invalid --threshold option for ${rawStandard}: "${options.threshold}". Supported options: ${validThresholds.join(", ")}`));
+    return { exitCode: 1, error: new Error(`Invalid threshold: ${options.threshold}`) };
+  }
+
+  const rawFormat = String(options.format || "text").toLowerCase();
+  if (!validFormats.includes(rawFormat)) {
+    console.error(chalk.red(`Invalid --format option: "${options.format}". Supported options: ${validFormats.join(", ")}`));
+    return { exitCode: 1, error: new Error(`Invalid format: ${options.format}`) };
+  }
+
+  if (options.output && rawFormat === "text") {
+    console.error(chalk.red("--output requires --format json or --format markdown"));
+    return {
+      exitCode: 1,
+      error: new Error("Text output cannot be written with --output"),
+    };
+  }
+
+  const activeStandard = normalizeStandard(rawStandard);
+  const threshold = rawThreshold;
+  const format = rawFormat;
 
   try {
     if (format === "text") {
@@ -55,10 +130,13 @@ async function runAudit(targetUrl, options = {}) {
     // Load page
     await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 30000 });
 
-    let contentJs = fs.readFileSync(
+    const contentJsPath = fs.existsSync(
       path.join(__dirname, "../chrome-extension/content/content.js"),
-      "utf8",
-    );
+    )
+      ? path.join(__dirname, "../chrome-extension/content/content.js")
+      : path.join(__dirname, "./content/content.js");
+
+    let contentJs = fs.readFileSync(contentJsPath, "utf8");
 
     const modifiedContentJs = contentJs.replace(
       /^\(\(\)\s*=>\s*\{/m,
@@ -66,7 +144,7 @@ async function runAudit(targetUrl, options = {}) {
     );
     const finalContentJs = modifiedContentJs.replace(
       /\}\)\(\);\s*$/m,
-      "return { extractElementPairs, extractColors };\n};",
+      "return { extractElementPairs, extractColors, auditFocusIndicators };\n};",
     );
 
     if (finalContentJs === contentJs) {
@@ -77,37 +155,16 @@ async function runAudit(targetUrl, options = {}) {
     }
     contentJs = finalContentJs;
 
+    const auditRunnerSource = buildPageAuditRunnerSource(contentJs);
     const auditResults = await page.evaluate(
-      (contentCode) => {
-        const globalContent = `
-        // 1. Inject content script wrapper
-        ${contentCode}
-
-        // 2. Stub chrome runtime
-        window.chrome = {
-          runtime: {
-            onMessage: { addListener: () => {} },
-            sendMessage: () => Promise.resolve({ ok: true })
-          }
-        };
-
-        // 3. Run extractor
-        const core = chromacheckInit();
-        const pairs = core.extractElementPairs();
-        const colors = core.extractColors();
-
-        return {
-          colors,
-          pairs,
-        };
-      `;
-
-        // Execute exactly within current page scope synchronously
-        const runnerCode = new Function(globalContent);
-        return runnerCode();
+      (runnerSource, isWcag22) => {
+        const runnerCode = new Function("isWcag22", runnerSource);
+        return runnerCode(isWcag22);
       },
-      contentJs,
+      auditRunnerSource,
+      activeStandard === "WCAG22",
     );
+
 
     const issues = buildCliIssues(auditResults.pairs, activeStandard);
     const colors = auditResults.colors;
@@ -123,13 +180,27 @@ async function runAudit(targetUrl, options = {}) {
         total: issues.length,
         fails: failures.length,
         warnings: 0,
+        sourcePairs: auditResults.pairs.length,
+        analyzedPairs: issues.length,
+        truncated: false,
       },
       palette: colors,
       issues,
     };
 
-    if (format === "json") {
-      console.log(JSON.stringify(payload, null, 2));
+    if (format === "json" || format === "markdown") {
+      const renderedOutput =
+        format === "json"
+          ? `${JSON.stringify(payload, null, 2)}\n`
+          : renderActionableMarkdownReport(payload, failures);
+
+      if (options.output) {
+        const outputPath = path.resolve(options.output);
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        fs.writeFileSync(outputPath, renderedOutput, "utf8");
+      } else {
+        process.stdout.write(renderedOutput);
+      }
     } else {
       console.log(chalk.bold(`\n📊 Audit Results for ${targetUrl}`));
       console.log(`Elements scanned: ${issues.length}`);
@@ -212,10 +283,15 @@ async function runFromCli(argv = process.argv) {
     )
     .option(
       "-t, --threshold <level>",
-      "Failure threshold level (AA, AAA, Bronze, Silver)",
+      "Failure threshold (AA or AAA; APCA also accepts Bronze or Silver)",
       "AA",
     )
-    .option("-f, --format <format>", "Output format (json, text)", "text")
+    .option(
+      "-f, --format <format>",
+      "Output format (json, markdown, text)",
+      "text",
+    )
+    .option("-o, --output <path>", "Write JSON or Markdown output to a file")
     .option("--disable-sandbox", "Disable Chrome sandbox (CI environments)")
     .option("--no-sandbox", "Disable Chrome sandbox (CI environments)")
     .parse(argv);
@@ -229,6 +305,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildPageAuditRunnerSource,
   buildCliIssues,
   getRequiredAPCALevel,
   isCliFailure,

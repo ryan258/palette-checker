@@ -141,7 +141,7 @@ not just how they are scored:
 | `text` — element text contrast | ✅ | ✅ | ✅ |
 | `placeholder` — form placeholder contrast | ✅ | ✅ | ✅ |
 | `non-text` — icons, SVG, borders | ✅ | ✅ | ✅ |
-| `focus-indicator` — focus ring contrast | ✅ | ✅ | ✅ |
+| `focus-indicator` — focus ring visibility/contrast | ❌ | ✅ | ❌ |
 | `link-contrast` — underline-less links vs body text | ✅ | ✅ | ❌ |
 | `target-size` — controls under 24×24px | ❌ | ✅ | ❌ |
 
@@ -149,9 +149,9 @@ Two consequences worth internalizing:
 
 - **Your issue count will jump when you switch to WCAG 2.2.** That is `target-size`
   appearing, not a regression.
-- **Your issue count will drop under APCA.** `link-contrast` and `target-size` are
-  color-independent criteria with no APCA equivalent, so they are withheld rather than
-  scored incorrectly.
+- **Your issue count will drop under APCA.** `focus-indicator`, `link-contrast`, and
+  `target-size` are product checks tied to the WCAG 2.2 mode and are withheld rather than
+  mapped onto APCA text thresholds.
 
 ---
 

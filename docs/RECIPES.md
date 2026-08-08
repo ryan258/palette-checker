@@ -320,8 +320,9 @@ echo "Total failures: $total"
 Each URL launches its own Chromium, so this is sequential and not fast. Budget roughly
 10–20 seconds per page and run it on a schedule rather than per-commit.
 
-**Watch for:** each scan is capped at 500 issues after sorting worst-first. On very large
-pages you're seeing the 500 worst findings, not all of them.
+**Evidence volume:** CLI JSON output is uncapped, so every analyzable pair remains available
+to this batch workflow. The separate 500-record cap applies only to the extension's
+interactive issue list and saved extension history.
 
 ---
 

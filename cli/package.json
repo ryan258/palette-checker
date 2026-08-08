@@ -3,11 +3,13 @@
   "version": "1.0.0",
   "main": "cli.js",
   "bin": {
-    "chromacheck": "./cli.js"
+    "chromacheck": "./cli.js",
+    "chromacheck-report": "./report.js"
   },
   "scripts": {
-    "prepack": "mkdir -p shared && cp ../chrome-extension/shared/contrast.js shared/contrast.js",
-    "test": "node --test cli.test.js"
+    "prepack": "(cd ../chrome-extension && ./build.sh) && mkdir -p shared content && cp ../chrome-extension/shared/contrast.js shared/contrast.js && cp ../chrome-extension/content/content.js content/content.js",
+    "postpack": "rm -rf shared content",
+    "test": "node --test cli.test.js report.test.js"
   },
   "keywords": [],
   "author": "",
@@ -17,5 +19,8 @@
     "chalk": "^4.1.2",
     "commander": "^14.0.3",
     "puppeteer": "^24.38.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
   }
 }

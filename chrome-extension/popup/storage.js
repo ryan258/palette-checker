@@ -104,11 +104,17 @@ export async function readAnalysisMap() {
 export async function writeAnalysisMap(analyses) {
   await chrome.storage.local.set({ [ANALYSIS_BY_URL_KEY]: analyses });
 }
-export async function saveAnalysisForCurrentPage(scanOrPalette, extractedAt) {
-  if (!state.pageContext.url) return;
+export async function saveAnalysisForPage(pageContext, scanOrPalette, extractedAt) {
+  const pageUrl =
+    typeof pageContext?.url === "string" ? pageContext.url.trim() : "";
+  if (!pageUrl) return;
+  const pageTitle =
+    typeof pageContext?.title === "string" && pageContext.title.trim()
+      ? pageContext.title
+      : pageUrl;
 
   const nextAnalyses = await readAnalysisMap();
-  let pageHistory = nextAnalyses[state.pageContext.url] || [];
+  let pageHistory = nextAnalyses[pageUrl] || [];
 
   if (!Array.isArray(pageHistory)) {
     pageHistory = pageHistory.palette ? [pageHistory] : [];
@@ -120,13 +126,13 @@ export async function saveAnalysisForCurrentPage(scanOrPalette, extractedAt) {
 
   const nextScan = Array.isArray(scanOrPalette)
     ? {
-        title: state.pageContext.title,
+        title: pageTitle,
         palette: scanOrPalette,
         extractedAt,
         issues: [],
       }
     : {
-        title: scanOrPalette?.title || state.pageContext.title,
+        title: scanOrPalette?.title || pageTitle,
         palette: Array.isArray(scanOrPalette?.palette)
           ? scanOrPalette.palette
           : [],
@@ -140,7 +146,7 @@ export async function saveAnalysisForCurrentPage(scanOrPalette, extractedAt) {
   pageHistory.unshift(nextScan);
 
   // Limit per-page history
-  nextAnalyses[state.pageContext.url] = pageHistory.slice(
+  nextAnalyses[pageUrl] = pageHistory.slice(
     0,
     MAX_HISTORY_PER_PAGE,
   );
@@ -160,6 +166,15 @@ export async function saveAnalysisForCurrentPage(scanOrPalette, extractedAt) {
 
   await writeAnalysisMap(Object.fromEntries(trimmedEntries));
   return previousLatest;
+}
+export async function saveAnalysisForCurrentPage(scanOrPalette, extractedAt) {
+  // Snapshot the identity before the first asynchronous storage read so a tab
+  // switch cannot redirect this write to a different page midway through it.
+  const pageContext = {
+    title: state.pageContext.title,
+    url: state.pageContext.url,
+  };
+  return saveAnalysisForPage(pageContext, scanOrPalette, extractedAt);
 }
 export async function loadSavedAnalysis(url) {
   if (!url) return null;

@@ -116,7 +116,7 @@ Several features are implemented thinly enough that they mislead users or contri
 - [ ] **HTML/PDF report export** -- Only JSON export exists. Either build a self-contained HTML report or stop claiming HTML/PDF support.
 - [x] **CLI / Node API** -- A real CLI now exists at [`cli/`](../cli/): `chromacheck <url> --standard --threshold --format` via Puppeteer plus the shared contrast library, with exit codes for CI. Pure audit logic lives in `cli/cli-helpers.js` and is unit-tested without Puppeteer.
 - [ ] **Firefox validation** -- Manifest metadata is present but the extension has not been validated on Firefox. Remove the claim of full Firefox support until tested.
-- [ ] **WCAG 2.2 focus appearance (SC 2.4.11/2.4.12)** -- Focus indicator contrast is checked, but the full focus appearance criteria (minimum area, change of contrast) are not implemented.
+- [ ] **WCAG 2.2 focus coverage** -- Focus visibility and adjacent-color contrast are checked, but Focus Not Obscured (SC 2.4.11/2.4.12) and Focus Appearance at AAA (SC 2.4.13: minimum area and focused-to-unfocused contrast) are not implemented.
 
 ---
 
@@ -142,7 +142,7 @@ These are valuable but should not be started until Priorities 1-5 are complete.
 - **Firefox Add-on** -- Validate the extension on Firefox, fix any side-panel or DevTools API differences
 - **CI integration** -- Document a copy-paste GitHub Actions / GitLab CI job wrapping the CLI. The pieces exist (`--format=json`, non-zero exit on failure, `--disable-sandbox` for containers); the recipe is not written down
 - **Design token-aware reporting** -- Report issues in terms of design system tokens, not raw hex values: "Your `--text-muted` token fails AA on `--bg-surface`"
-- **WCAG 2.2 full compliance mode** -- Complete SC 2.4.11/2.4.12 (focus appearance area and contrast change), SC 2.4.13 (focus not obscured)
+- **WCAG 2.2 full compliance mode** -- Add SC 2.4.11/2.4.12 Focus Not Obscured and SC 2.4.13 Focus Appearance (minimum area and focused-to-unfocused contrast)
 
 ---
 

@@ -166,6 +166,7 @@ function shouldIncludeIssueType(type, standard = "WCAG21") {
 
   switch (type) {
     case "target-size":
+    case "focus-indicator":
       return activeStandard === "WCAG22";
     case "link-contrast":
       return activeStandard !== "APCA";
@@ -525,16 +526,19 @@ function buildCombinationsData(colors, settings) {
 
 function shouldAnalyzePair(pair, settings) {
   if (!pair || typeof pair !== "object") return false;
-  if (pair.type === "focus-indicator") {
-    return settings?.standard === "WCAG22";
-  }
   return shouldIncludeIssueType(pair.type, settings?.standard);
 }
 
 function buildIssuesData(pairs, settings) {
   const cvdMode = settings?.cvdMode || "none";
+  const issueLimit =
+    settings?.issueLimit === null
+      ? null
+      : Number.isInteger(settings?.issueLimit) && settings.issueLimit >= 0
+        ? settings.issueLimit
+        : 500;
 
-  return (Array.isArray(pairs) ? pairs : [])
+  const issues = (Array.isArray(pairs) ? pairs : [])
     .filter((pair) => shouldAnalyzePair(pair, settings))
     .map((pair) => {
       const simText = simulateCVD(pair.textColor, cvdMode);
@@ -558,11 +562,14 @@ function buildIssuesData(pairs, settings) {
         wcagLevel = "Fail";
         apcaScore = 0;
         apcaLevel = "Fail";
-      } else if (pair.type === "focus-indicator") {
-        wcagLevel = wcagRatio >= 3 ? "AA Large" : "Fail";
-        apcaLevel = Math.abs(apcaScore) >= 45 ? "AA Large" : "Fail";
-      } else if (pair.type === "link-contrast") {
-        wcagLevel = wcagRatio >= 3 ? "AA Large" : "Fail";
+      } else if (
+        pair.type === "non-text" ||
+        pair.type === "focus-indicator" ||
+        pair.type === "link-contrast"
+      ) {
+        // These criteria use a fixed 3:1 WCAG threshold. "AA Large" is a
+        // text-size classification and must not be used for non-text checks.
+        wcagLevel = wcagRatio >= 3 ? "AA" : "Fail";
         apcaLevel = Math.abs(apcaScore) >= 45 ? "AA Large" : "Fail";
       }
 
@@ -585,8 +592,12 @@ function buildIssuesData(pairs, settings) {
       const levelDelta = getLevelRank(a.wcagLevel) - getLevelRank(b.wcagLevel);
       if (levelDelta !== 0) return levelDelta;
       return a.wcagRatio - b.wcagRatio;
-    })
-    .slice(0, 500);
+    });
+
+  // The extension intentionally caps the interactive issue list. Batch
+  // consumers such as the CLI opt out with issueLimit: null so exported
+  // evidence is never silently discarded.
+  return issueLimit === null ? issues : issues.slice(0, issueLimit);
 }
 
 // --- Shared UI Utilities ---

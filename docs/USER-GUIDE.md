@@ -175,8 +175,9 @@ node cli.js <url> [options]
 | Option | Values | Default | Meaning |
 |--------|--------|---------|---------|
 | `-s, --standard` | `WCAG21`, `WCAG22`, `APCA` | `WCAG21` | Which contrast standard to evaluate |
-| `-t, --threshold` | `AA`, `AAA`, `Silver`, `Bronze` | `AA` | Minimum level that counts as a pass |
-| `-f, --format` | `text`, `json` | `text` | Output format |
+| `-t, --threshold` | `AA`, `AAA`; APCA also accepts `Silver`, `Bronze` | `AA` | Minimum level that counts as a pass |
+| `-f, --format` | `text`, `json`, `markdown` | `text` | Output format |
+| `-o, --output` | File path | — | Write JSON or Markdown directly to a file |
 
 `WCAG22` additionally evaluates target size and focus-indicator checks. For APCA,
 `Silver` maps to the AA tier and `Bronze` to the large-text tier.
@@ -196,6 +197,10 @@ node cli.js https://example.com --standard APCA --threshold Silver
 # Machine-readable report for tooling
 node cli.js https://example.com --format json > report.json
 
+# Prioritized report that retains every selector as evidence
+node cli.js https://example.com --standard WCAG22 --format markdown \
+  --output report.md
+
 # Audit a local file
 node cli.js file:///absolute/path/to/index.html
 ```
@@ -211,11 +216,25 @@ node cli.js file:///absolute/path/to/index.html
     "timestamp": "…",
     "url": "…",
     "settings": { "standard": "WCAG21", "threshold": "AA" },
-    "metrics": { "total": 0, "fails": 0, "warnings": 0 },
+    "metrics": {
+      "total": 0,
+      "fails": 0,
+      "warnings": 0,
+      "sourcePairs": 0,
+      "analyzedPairs": 0,
+      "truncated": false
+    },
     "palette": ["#…"],
     "issues": [ /* per-element results */ ]
   }
   ```
+
+- **markdown** mode emits a prioritized, grouped remediation report. Repeated failures are
+  consolidated into shared actions, but all selectors and evidence IDs remain present.
+  Link-differentiation and target-size candidates are marked for manual applicability
+  confirmation instead of being presented as unconditional fixes.
+- CLI JSON and Markdown evidence are uncapped. The extension's interactive list has a
+  separate 500-record limit documented in [LIMITATIONS.md](LIMITATIONS.md#scale-and-storage-limits).
 
 - **Exit code** is `1` when any violations are found (and on fatal errors), `0` when the
   page passes. This makes it directly usable as a CI gate.
