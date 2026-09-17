@@ -202,7 +202,7 @@ export function extractElementPairs() {
       const textColor = componentsToHex(renderedPair.text);
       const bgColor = componentsToHex(renderedPair.background);
 
-      if (textColor !== bgColor) {
+      { // Retain meaningful 1:1 contrast pairs; visibility is checked before extraction.
         const id = String(idCounter++);
         trackElement(id, el);
         pairs.push({

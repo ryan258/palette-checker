@@ -373,7 +373,7 @@
         const renderedPair = getRenderedPair(el, textRGBA);
         const textColor = componentsToHex(renderedPair.text);
         const bgColor = componentsToHex(renderedPair.background);
-        if (textColor !== bgColor) {
+        {
           const id = String(idCounter++);
           trackElement(id, el);
           pairs.push({

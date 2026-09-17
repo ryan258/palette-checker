@@ -167,6 +167,24 @@ async function runAudit(targetUrl, options = {}) {
 
 
     const issues = buildCliIssues(auditResults.pairs, activeStandard);
+    const selectors = await page.evaluate((values) => values.map((selector) => {
+      let element; try { element = document.querySelector(selector); } catch { return { selector, resolved: false }; }
+      if (!element || document.querySelectorAll(selector).length !== 1) return { selector, resolved: false };
+      if (element.id) return { selector: '#' + CSS.escape(element.id), resolved: true };
+      const path = [];
+      for (let current = element; current; current = current.parentElement) {
+        let part = current.tagName.toLowerCase();
+        const className = Array.from(current.classList).find((value) => /^[a-zA-Z_-][\w-]*$/.test(value));
+        if (className) part += '.' + CSS.escape(className);
+        if (current.parentElement) {
+          const siblings = Array.from(current.parentElement.children).filter((child) => child.tagName === current.tagName);
+          if (siblings.length > 1) part += ':nth-of-type(' + (siblings.indexOf(current) + 1) + ')';
+        }
+        path.unshift(part);
+      }
+      return { selector: path.join(' > '), resolved: true };
+    }), issues.map((issue) => issue.selector));
+    issues.forEach((issue, index) => { issue.selector = selectors[index].selector; issue.selectorResolved = selectors[index].resolved; });
     const colors = auditResults.colors;
     const failures = issues.filter((issue) =>
       isCliFailure(issue, { standard: activeStandard, threshold }),
@@ -174,7 +192,9 @@ async function runAudit(targetUrl, options = {}) {
 
     const payload = {
       timestamp: new Date().toISOString(),
-      url: targetUrl,
+      url: page.url(),
+      selectorDialect: "ally-css-v2",
+      adapterVersion: 1,
       settings: { standard: activeStandard, threshold },
       metrics: {
         total: issues.length,

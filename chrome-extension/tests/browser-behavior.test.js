@@ -684,3 +684,18 @@ test(
     assert.deepEqual(pageErrors, []);
   },
 );
+
+test('visible same-color text is retained as a 1:1 contrast pair', { skip: puppeteerSkip }, async () => {
+  const pairs = await withBrowser(
+    { '/same-color.html': '<!doctype html><html><body><p id="same" style="color:#fff;background:#fff">Meaningful text</p><p hidden>Hidden text</p></body></html>' },
+    '/same-color.html',
+    (page) => page.evaluate(async () => {
+      const { extractElementPairs } = await import('/chrome-extension/content/extraction.js');
+      return extractElementPairs();
+    }),
+  );
+  const same = pairs.find((pair) => pair.selector === '#same' && pair.type === 'text');
+  assert.ok(same, 'visible meaningful text must not disappear when colors are identical');
+  assert.equal(same.textColor.toLowerCase(), same.bgColor.toLowerCase());
+  assert.equal(pairs.some((pair) => pair.textPreview === 'Hidden text'), false);
+});
