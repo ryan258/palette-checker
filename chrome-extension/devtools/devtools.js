@@ -15,10 +15,12 @@ chrome.devtools.panels.create(
 
 // 2. Create the Elements sidebar pane for contextual contrast
 chrome.devtools.panels.elements.createSidebarPane("Contrast", (sidebar) => {
-  sidebar.setPage("devtools/sidebar.html");
+  let sidebarWindow = null;
+  let selectionVersion = 0;
 
-  // Listen for selection changes in the Elements panel
-  chrome.devtools.panels.elements.onSelectionChanged.addListener(() => {
+  function updateSelection() {
+    const version = ++selectionVersion;
+    if (!sidebarWindow) return;
     // Evaluate script in the context of the inspected window to get computed styles.
     // NOTE: getMinimalSelector and getEffectiveBackground are duplicated here because
     // chrome.devtools.inspectedWindow.eval runs in the page context where extension
@@ -116,13 +118,20 @@ chrome.devtools.panels.elements.createSidebarPane("Contrast", (sidebar) => {
       `;
 
     chrome.devtools.inspectedWindow.eval(evalString, (result, isException) => {
-      if (!isException && result) {
-        // Send message to the sidebar pane with the new element data
-        chrome.runtime.sendMessage({
-          action: "inspectedElementChanged",
-          data: result,
-        });
-      }
+      if (!sidebarWindow || version !== selectionVersion) return;
+      // Deliver only to this DevTools instance, without a runtime receiver race.
+      sidebarWindow.renderSidebar(isException ? null : result);
     });
+  }
+
+  chrome.devtools.panels.elements.onSelectionChanged.addListener(updateSelection);
+  sidebar.onShown.addListener((window) => {
+    sidebarWindow = window;
+    updateSelection();
   });
+  sidebar.onHidden.addListener(() => {
+    sidebarWindow = null;
+    ++selectionVersion;
+  });
+  sidebar.setPage("devtools/sidebar.html");
 });

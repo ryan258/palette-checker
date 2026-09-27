@@ -222,9 +222,3 @@ function renderSidebar(data) {
     </div>
   `;
 }
-
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.action === "inspectedElementChanged") {
-    renderSidebar(message.data);
-  }
-});
