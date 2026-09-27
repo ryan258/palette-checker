@@ -102,19 +102,53 @@
     if (el.closest('[aria-hidden="true"]')) return false;
     return true;
   }
+  var REPLACED_MEDIA = /* @__PURE__ */ new Set(["IMG", "PICTURE", "VIDEO", "CANVAS", "IFRAME", "WOW-IMAGE"]);
+  function renderItem(node) {
+    const style = window.getComputedStyle(node);
+    return {
+      node,
+      background: parseRGBA(style.backgroundColor),
+      hasBackgroundImage: Boolean(style.backgroundImage && style.backgroundImage !== "none") || REPLACED_MEDIA.has(node.tagName),
+      opacity: parseFloat(style.opacity),
+      animated: Boolean(style.animationName && style.animationName !== "none")
+    };
+  }
+  function paintedStackBelow(el) {
+    if (typeof document.elementsFromPoint !== "function") return null;
+    let rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const { scrollX, scrollY } = window;
+    const offscreen = rect.top + rect.height / 2 < 0 || rect.top + rect.height / 2 >= window.innerHeight;
+    if (offscreen) {
+      window.scrollTo(scrollX, scrollY + rect.top + rect.height / 2 - window.innerHeight / 2);
+      rect = el.getBoundingClientRect();
+    }
+    try {
+      const x = Math.min(Math.max(rect.left + rect.width / 2, 0), window.innerWidth - 1);
+      const y = Math.min(Math.max(rect.top + rect.height / 2, 0), window.innerHeight - 1);
+      const stack = document.elementsFromPoint(x, y).filter((node) => !isChromaCheckOwnedNode(node));
+      const anchor = stack.findIndex((node) => node === el || node.contains(el));
+      return anchor === -1 ? null : { anchor: stack[anchor], below: stack.slice(anchor + 1) };
+    } finally {
+      if (offscreen) window.scrollTo(scrollX, scrollY);
+    }
+  }
   function buildRenderChain(el) {
     const chain = [];
     let current = el;
     while (current) {
-      const style = window.getComputedStyle(current);
-      chain.push({
-        background: parseRGBA(style.backgroundColor),
-        hasBackgroundImage: Boolean(style.backgroundImage && style.backgroundImage !== "none"),
-        opacity: parseFloat(style.opacity)
-      });
+      chain.push(renderItem(current));
       current = current.parentElement;
     }
-    return chain;
+    const painted = paintedStackBelow(el);
+    const anchorIndex = painted ? chain.findIndex((item) => item.node === painted.anchor) : -1;
+    if (anchorIndex === -1) return chain;
+    return chain.slice(0, anchorIndex + 1).concat(painted.below.map((node) => {
+      const item = renderItem(node);
+      if (node.contains(el)) return item;
+      const opacity = Number.isFinite(item.opacity) ? Math.max(0, Math.min(1, item.opacity)) : 1;
+      return { ...item, background: item.background && { ...item.background, a: item.background.a * opacity }, opacity: 1 };
+    }));
   }
   function getBackdropsForChain(chain) {
     const backdrops = new Array(chain.length + 1);
@@ -145,6 +179,7 @@
     for (let i = 0; i < chain.length; i++) {
       const opacity = Number.isFinite(chain[i].opacity) ? Math.max(0, Math.min(1, chain[i].opacity)) : 1;
       if (opacity >= 1) continue;
+      if (opacity === 0 && chain[i].animated) continue;
       const outsideBackdrop = backdrops[i + 1];
       background = applyOpacity(background, opacity, outsideBackdrop);
       text = applyOpacity(text, opacity, outsideBackdrop);

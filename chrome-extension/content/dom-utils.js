@@ -39,21 +39,70 @@ export function isContentVisible(el) {
   if (el.closest('[aria-hidden="true"]')) return false;
   return true;
 }
+const REPLACED_MEDIA = new Set(["IMG", "PICTURE", "VIDEO", "CANVAS", "IFRAME", "WOW-IMAGE"]);
+
+function renderItem(node) {
+  const style = window.getComputedStyle(node);
+  return {
+    node,
+    background: parseRGBA(style.backgroundColor),
+    hasBackgroundImage:
+      Boolean(style.backgroundImage && style.backgroundImage !== "none") ||
+      REPLACED_MEDIA.has(node.tagName),
+    opacity: parseFloat(style.opacity),
+    animated: Boolean(style.animationName && style.animationName !== "none"),
+  };
+}
+
+/**
+ * What is actually painted under `el`, top to bottom, from the hit-test stack at its centre.
+ * Builders (Wix, Squarespace) paint section colour on a sibling layer, so an ancestor-only walk
+ * lands on the page background and reports light text as white-on-white.
+ * Returns null when `el` cannot be hit-tested; callers then fall back to ancestors.
+ */
+function paintedStackBelow(el) {
+  if (typeof document.elementsFromPoint !== "function") return null;
+  let rect = el.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return null;
+  const { scrollX, scrollY } = window;
+  const offscreen = rect.top + rect.height / 2 < 0 || rect.top + rect.height / 2 >= window.innerHeight;
+  // ponytail: instant scroll per offscreen element; batch by viewport band if large pages get slow.
+  if (offscreen) {
+    window.scrollTo(scrollX, scrollY + rect.top + rect.height / 2 - window.innerHeight / 2);
+    rect = el.getBoundingClientRect();
+  }
+  try {
+    const x = Math.min(Math.max(rect.left + rect.width / 2, 0), window.innerWidth - 1);
+    const y = Math.min(Math.max(rect.top + rect.height / 2, 0), window.innerHeight - 1);
+    const stack = document.elementsFromPoint(x, y).filter((node) => !isChromaCheckOwnedNode(node));
+    // Anything above `el` (sticky headers, its own children) does not sit behind its text.
+    const anchor = stack.findIndex((node) => node === el || node.contains(el));
+    return anchor === -1 ? null : { anchor: stack[anchor], below: stack.slice(anchor + 1) };
+  } finally {
+    if (offscreen) window.scrollTo(scrollX, scrollY);
+  }
+}
+
 export function buildRenderChain(el) {
   const chain = [];
   let current = el;
 
   while (current) {
-    const style = window.getComputedStyle(current);
-    chain.push({
-      background: parseRGBA(style.backgroundColor),
-      hasBackgroundImage: Boolean(style.backgroundImage && style.backgroundImage !== "none"),
-      opacity: parseFloat(style.opacity),
-    });
+    chain.push(renderItem(current));
     current = current.parentElement;
   }
 
-  return chain;
+  const painted = paintedStackBelow(el);
+  const anchorIndex = painted ? chain.findIndex((item) => item.node === painted.anchor) : -1;
+  if (anchorIndex === -1) return chain;
+
+  // Ancestors keep their opacity (it fades the text too); a sibling layer's opacity only fades itself.
+  return chain.slice(0, anchorIndex + 1).concat(painted.below.map((node) => {
+    const item = renderItem(node);
+    if (node.contains(el)) return item;
+    const opacity = Number.isFinite(item.opacity) ? Math.max(0, Math.min(1, item.opacity)) : 1;
+    return { ...item, background: item.background && { ...item.background, a: item.background.a * opacity }, opacity: 1 };
+  }));
 }
 export function getBackdropsForChain(chain) {
   const backdrops = new Array(chain.length + 1);
@@ -93,6 +142,9 @@ export function getRenderedPair(el, textRGBA) {
       : 1;
 
     if (opacity >= 1) continue;
+    // Entrance animations (Wix "floatIn", AOS, etc.) hold content at opacity 0 until it scrolls into
+    // view; measure the settled state rather than reporting every section as 1:1.
+    if (opacity === 0 && chain[i].animated) continue;
 
     const outsideBackdrop = backdrops[i + 1];
     background = applyOpacity(background, opacity, outsideBackdrop);

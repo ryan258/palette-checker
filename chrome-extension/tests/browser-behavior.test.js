@@ -699,3 +699,48 @@ test('visible same-color text is retained as a 1:1 contrast pair', { skip: puppe
   assert.equal(same.textColor.toLowerCase(), same.bgColor.toLowerCase());
   assert.equal(pairs.some((pair) => pair.textPreview === 'Hidden text'), false);
 });
+
+test('text over a sibling background layer is measured against that layer, even offscreen', { skip: puppeteerSkip }, async () => {
+  const html = `<!doctype html><html><body style="margin:0;background:#f9f9f9">
+    <div style="height:3000px"></div>
+    <section style="position:relative;height:200px">
+      <div style="position:absolute;inset:0;background:#283f47"></div>
+      <div style="position:relative"><h2 id="footer-text" style="color:#f9f9f9;margin:0">Subscribe</h2></div>
+    </section></body></html>`;
+  const { pairs, scrollY } = await withBrowser(
+    { '/sibling-layer.html': html },
+    '/sibling-layer.html',
+    (page) => page.evaluate(async () => {
+      const { extractElementPairs } = await import('/chrome-extension/content/extraction.js');
+      return { pairs: extractElementPairs(), scrollY: window.scrollY };
+    }),
+  );
+  const pair = pairs.find((item) => item.selector === '#footer-text' && item.type === 'text');
+  assert.ok(pair);
+  assert.equal(pair.bgColor.toLowerCase(), '#283f47');
+  assert.equal(scrollY, 0, 'measurement must restore the scroll position');
+});
+
+test('text held invisible by a pending entrance animation is measured in its settled state', { skip: puppeteerSkip }, async () => {
+  const html = `<!doctype html><html><head><style>
+    @keyframes float-in { from { opacity: 0 } to { opacity: 1 } }
+    .pending { opacity: 0; animation: float-in 1s paused; }
+  </style></head><body style="background:#ecf9f6">
+    <div class="pending"><h2 id="animated" style="color:#377e71">Our Difference</h2></div>
+    <div style="opacity:0"><p id="hidden-static" style="color:#377e71">Static hidden</p></div>
+  </body></html>`;
+  const pairs = await withBrowser(
+    { '/entrance.html': html },
+    '/entrance.html',
+    (page) => page.evaluate(async () => {
+      const { extractElementPairs } = await import('/chrome-extension/content/extraction.js');
+      return extractElementPairs();
+    }),
+  );
+  const animated = pairs.find((item) => item.selector === '#animated' && item.type === 'text');
+  assert.ok(animated);
+  assert.equal(animated.textColor.toLowerCase(), '#377e71');
+  assert.equal(animated.bgColor.toLowerCase(), '#ecf9f6');
+  const hidden = pairs.find((item) => item.selector === '#hidden-static' && item.type === 'text');
+  if (hidden) assert.equal(hidden.textColor.toLowerCase(), hidden.bgColor.toLowerCase(), 'plain opacity:0 keeps its current behaviour');
+});
